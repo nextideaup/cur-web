@@ -1,0 +1,35 @@
+title = "NextIdeaUp Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "niu-mgmt-api-token"
+description = "NextIdeaUp cross-app management API token"
+regex = '''(?i)mgmt_api_token['"\s:=]+[A-Za-z0-9+/]{32,}={0,2}'''
+tags = ["niu", "mgmt-api"]
+
+[[rules]]
+id = "niu-nextauth-secret"
+description = "NextAuth secret"
+regex = '''(?i)nextauth_secret['"\s:=]+[A-Za-z0-9+/]{32,}={0,2}'''
+tags = ["niu", "nextauth"]
+
+[[rules]]
+id = "niu-staging-sync-secret"
+description = "NIU staging-sync Bearer"
+regex = '''(?i)staging_sync_secret['"\s:=]+[A-Za-z0-9+/]{32,}={0,2}'''
+tags = ["niu", "staging-sync"]
+
+[allowlist]
+description = "Known-safe patterns"
+regexes = [
+  '''test-secret-ci''',
+  '''ci-e2e-secret''',
+  '''dev-secret-do-not-ship''',
+]
+paths = [
+  '''(.*?)package-lock\.json$''',
+  '''(.*?)\.env\.example$''',
+  '''docs/runbooks/.*\.md$''',
+]
