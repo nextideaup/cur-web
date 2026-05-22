@@ -9,7 +9,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { query } from "@/lib/db";
-import { GuitarPursuit, WatchPursuit, AutoPursuit, IoDPursuit, GUITAR_SOURCES, WATCH_SOURCES } from "@/lib/types";
+import { GuitarPursuit, WatchPursuit, AutoPursuit, IoDPursuit } from "@/lib/types";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -113,8 +113,7 @@ async function searchPlatform(
   itemType: "guitar" | "watch" | "auto" | "iod",
   excludeTerms: string | null = null,
 ): Promise<RawListing[]> {
-  const site   = SOURCE_SITES[source] ?? source;
-  const typeLabel = itemType === "guitar" ? "guitar" : itemType === "watch" ? "watch" : itemType === "auto" ? "vehicle" : "item";
+  const site = SOURCE_SITES[source] ?? source;
 
   const locationNote = location ? ` Near: ${location}.` : "";
 
@@ -187,13 +186,19 @@ If you truly find zero matching listings after searching, return exactly: []
       messages:   [{ role: "user", content: prompt }],
     });
 
-    console.log(`[pursuit-search] ${source} → stop_reason=${response.stop_reason}, blocks=${response.content.length}`);
-    console.log(`[pursuit-search] ${source} block types:`, response.content.map((b: any) => b.type).join(", "));
+    // Anthropic SDK ContentBlock shape (subset we use here). The web_search beta
+    // returns additional block types not yet exported by the SDK; we narrow to
+    // `text` blocks via the `type` discriminator.
+    type ContentBlock = { type: string; text?: string };
+    const blocks: ContentBlock[] = response.content;
+
+    console.log(`[pursuit-search] ${source} → stop_reason=${response.stop_reason}, blocks=${blocks.length}`);
+    console.log(`[pursuit-search] ${source} block types:`, blocks.map((b) => b.type).join(", "));
 
     // Extract all text blocks (the model weaves final answer text among tool-call blocks)
-    const textContent = response.content
-      .filter((b: any) => b.type === "text")
-      .map((b: any) => b.text)
+    const textContent = blocks
+      .filter((b): b is ContentBlock & { text: string } => b.type === "text" && typeof b.text === "string")
+      .map((b) => b.text)
       .join("");
 
     console.log(`[pursuit-search] ${source} text length: ${textContent.length}`);

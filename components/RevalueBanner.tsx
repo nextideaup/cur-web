@@ -7,7 +7,6 @@ export default function RevalueBanner() {
 
   if (!state || state.isDismissed) return null;
 
-  const pct = state.total > 0 ? Math.round((state.done / state.total) * 100) : 0;
   const valued = state.results.filter((r) => !r.error).length;
   const failed = state.results.filter((r) => r.error).length;
   const rateLimited = state.results.filter((r) => r.rateLimited).length;
