@@ -22,15 +22,6 @@ const formatCurrencyRaw = (value: number | null | undefined) => {
   }).format(Number(value));
 };
 
-const formatPriceRangeRaw = (min: number | null, max: number | null): string | null => {
-  if (min == null && max == null) return null;
-  if (min != null && max != null) {
-    return `${formatCurrencyRaw(min)} – ${formatCurrencyRaw(max)}`;
-  }
-  if (min != null) return `From ${formatCurrencyRaw(min)}`;
-  return `Up to ${formatCurrencyRaw(max)}`;
-};
-
 const getSourceLabel = (id: string, otherSource?: string | null) => {
   if (id === "other" && otherSource) return otherSource;
   return WATCH_SOURCES.find((s) => s.id === id)?.label ?? id;

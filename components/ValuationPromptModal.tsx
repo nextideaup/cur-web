@@ -79,7 +79,7 @@ export default function ValuationPromptModal({
               <span className="text-text font-medium">{itemName}</span> has been added to your collection.
             </p>
             <p className="text-text-muted text-sm mb-8">
-              Would you like an AI-powered resale value estimate? We'll search eBay & Reverb for comparable sold listings.
+              Would you like an AI-powered resale value estimate? We&apos;ll search eBay &amp; Reverb for comparable sold listings.
             </p>
             <div className="flex gap-3 justify-center">
               <button
