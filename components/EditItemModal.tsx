@@ -12,9 +12,12 @@ import {
   CONDITION_COLORS,
 } from "@/lib/types";
 import { useEditImageList } from "@/lib/hooks/useEditImageList";
+import { useSpecsList } from "@/lib/hooks/useSpecsList";
 import { uploadFiles, type UploadedFile } from "@/lib/api/uploadFiles";
+import { guitarConfig } from "@/lib/collections/guitar";
 import ModalShell from "@/components/forms/ModalShell";
 import EditImagesEditor from "@/components/forms/EditImagesEditor";
+import SpecsEditor from "@/components/forms/SpecsEditor";
 import ModalActions, { SaveCheckIcon } from "@/components/forms/ModalActions";
 
 interface EditItemModalProps {
@@ -57,6 +60,7 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
   });
 
   const editImages = useEditImageList<GuitarImage>(item.images ?? []);
+  const specs = useSpecsList(item.specs);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -115,6 +119,7 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
         link: form.link.trim() || null,
         notes: form.notes.trim() || null,
         insure: form.insure,
+        specs: specs.derive(),
         images_to_delete: imagesToDelete,
         image_order: imageOrder,
         image_paths: uploadedFiles,
@@ -332,6 +337,8 @@ export default function EditItemModal({ item, onClose, onItemUpdated }: EditItem
             </span>
           </span>
         </label>
+
+        <SpecsEditor specs={specs} templateSuggestions={guitarConfig.specTemplate} />
 
         <EditImagesEditor edit={editImages} />
 

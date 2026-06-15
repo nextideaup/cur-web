@@ -9,8 +9,12 @@ export interface FieldSpec {
   // Field type discriminator. Defaults to "string" (current normalize behaviour).
   // "boolean" bypasses the `value || null` coercion in normalizeField so that
   // `false` survives the round-trip — critical for the NOT NULL `insure` column
-  // added by CUR-2 (migration 016). Add other types here as needed.
-  type?: "boolean";
+  // added by CUR-2 (migration 016).
+  // "jsonb" JSON.stringifies the value before binding it as a query parameter
+  // (node-postgres would otherwise mangle a JS array into a Postgres array
+  // literal). An empty array / null collapses to SQL NULL. Used by the freeform
+  // `specs` column (migration 019). Add other types here as needed.
+  type?: "boolean" | "jsonb";
 }
 
 // Module slug used by lib/insurance-valuation.ts MODULE_CATEGORIES and the
@@ -32,4 +36,10 @@ export interface CollectionConfig {
   conditionRequired: boolean; // true: condition must be set + valid; false: validate only when provided
   patchSetUpdatedAt: boolean; // automobiles + iod set updated_at = NOW() in UPDATE; guitars/watches rely on a trigger
   forceDynamic: boolean;     // automobiles + iod export const dynamic = "force-dynamic"
+  // Suggested spec keys for this module (CUR-1 specs / flip-sell groundwork).
+  // The AI specs handler (lib/specs-handler.ts) targets these labels when
+  // researching, and the SpecsEditor pre-seeds empty rows from them so manual
+  // entry has a head start. Users can still add ad-hoc labels beyond this list,
+  // and the AI may return relevant extras — the template is a hint, not a schema.
+  specTemplate: readonly string[];
 }

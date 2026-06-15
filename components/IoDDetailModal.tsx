@@ -5,6 +5,8 @@ import { IoDItem, IoDImage, ComparableSale, CONDITION_COLORS, IOD_CATEGORY_LABEL
 import { useHideValues } from "@/lib/HideValuesContext";
 import EditIoDModal from "@/components/EditIoDModal";
 import InsuranceValueRow from "@/components/InsuranceValueRow";
+import SpecsSection from "@/components/forms/SpecsSection";
+import { iodConfig } from "@/lib/collections/iod";
 
 interface IoDDetailModalProps {
   item: IoDItem;
@@ -355,6 +357,20 @@ export default function IoDDetailModal({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* ── Specs Section ── */}
+          <div className="mt-6 pt-6 border-t border-border px-6">
+            <SpecsSection
+              module="iod"
+              itemId={item.id}
+              specs={item.specs}
+              specsUpdatedAt={item.specs_updated_at}
+              template={iodConfig.specTemplate}
+              onUpdated={(specs, specs_updated_at) =>
+                onItemUpdated?.({ ...item, specs, specs_updated_at })
+              }
+            />
           </div>
 
           {/* Valuation section */}

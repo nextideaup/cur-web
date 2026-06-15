@@ -11,9 +11,12 @@ import {
   CONDITION_COLORS,
 } from "@/lib/types";
 import { useImageUpload } from "@/lib/hooks/useImageUpload";
+import { useSpecsList } from "@/lib/hooks/useSpecsList";
+import { autoConfig } from "@/lib/collections/auto";
 import { uploadFiles, type UploadedFile } from "@/lib/api/uploadFiles";
 import ModalShell from "@/components/forms/ModalShell";
 import ImagesEditor from "@/components/forms/ImagesEditor";
+import SpecsEditor from "@/components/forms/SpecsEditor";
 import ModalActions from "@/components/forms/ModalActions";
 
 interface AddAutomobileModalProps {
@@ -71,6 +74,7 @@ export default function AddAutomobileModal({
   });
 
   const imageUpload = useImageUpload();
+  const specs = useSpecsList();
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -127,6 +131,7 @@ export default function AddAutomobileModal({
         purchase_source: form.purchase_source.trim() || null,
         notes: form.notes.trim() || null,
         insure: form.insure,
+        specs: specs.derive(),
         image_paths: uploadedFiles,
       };
 
@@ -398,6 +403,8 @@ export default function AddAutomobileModal({
             </span>
           </span>
         </label>
+
+        <SpecsEditor specs={specs} templateSuggestions={autoConfig.specTemplate} />
 
         <ImagesEditor upload={imageUpload} />
 

@@ -12,6 +12,15 @@ const API_PATH: Record<BulkActionModule, string> = {
   iod: "/api/iod/bulk-action",
 };
 
+// Bulk AI specs generation (CUR-1). Separate endpoint + response shape from the
+// set_insure/archive/delete bulk-action route.
+const SPECS_BATCH_PATH: Record<BulkActionModule, string> = {
+  guitars: "/api/guitars/specs-batch",
+  watches: "/api/watches/specs-batch",
+  automobiles: "/api/automobiles/specs-batch",
+  iod: "/api/iod/specs-batch",
+};
+
 interface BulkActionResult {
   action: "set_insure" | "archive" | "delete";
   affected: number;
@@ -30,6 +39,9 @@ interface BulkActionBarProps {
   onClearSelection: () => void;
   onSelectAll: () => void;
   onActionComplete: (result: BulkActionResult) => void;
+  // Called after a bulk specs generation so the page can refetch items and
+  // surface the new specs. Optional — without it the bar just reports a summary.
+  onSpecsGenerated?: () => void;
 }
 
 /**
@@ -45,8 +57,9 @@ export default function BulkActionBar({
   onClearSelection,
   onSelectAll,
   onActionComplete,
+  onSpecsGenerated,
 }: BulkActionBarProps) {
-  const [busy, setBusy] = useState<null | "set_insure" | "archive" | "delete">(null);
+  const [busy, setBusy] = useState<null | "set_insure" | "archive" | "delete" | "generate_specs">(null);
   const count = selectedIds.size;
 
   if (count === 0) return null;
@@ -73,6 +86,31 @@ export default function BulkActionBar({
     } catch (err) {
       console.error(`[bulk-action] ${action} failed`, err);
       alert(err instanceof Error ? err.message : `Bulk ${action} failed`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runSpecsBatch() {
+    if (!confirm(`Generate specs with AI for ${count} item${count !== 1 ? "s" : ""}?\n\nEach item is researched via web search (a few seconds each). Manual specs you've already entered are preserved.`)) return;
+    setBusy("generate_specs");
+    try {
+      const res = await fetch(SPECS_BATCH_PATH[module], {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Specs generation failed" }));
+        throw new Error(err.error || "Specs generation failed");
+      }
+      const result = (await res.json()) as { generated: number; failed: number };
+      alert(`Specs generated for ${result.generated} item${result.generated !== 1 ? "s" : ""}.${result.failed ? ` ${result.failed} failed.` : ""}`);
+      onSpecsGenerated?.();
+      onClearSelection();
+    } catch (err) {
+      console.error("[bulk-action] generate_specs failed", err);
+      alert(err instanceof Error ? err.message : "Bulk specs generation failed");
     } finally {
       setBusy(null);
     }
@@ -134,6 +172,16 @@ export default function BulkActionBar({
             icon={
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            }
+          />
+          <ActionButton
+            label="Generate Specs"
+            onClick={runSpecsBatch}
+            busy={busy === "generate_specs"}
+            icon={
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
               </svg>
             }
           />

@@ -399,6 +399,7 @@ export default function CategoryPage() {
       {/* CUR-6: bulk-action bar (visible when any items selected). */}
       <BulkActionBar
         module="guitars"
+        onSpecsGenerated={fetchItems}
         selectedIds={selectedIds}
         selectedInsuredCount={items.filter((i) => selectedIds.has(i.id) && i.insure).length}
         totalSelectableCount={items.length}

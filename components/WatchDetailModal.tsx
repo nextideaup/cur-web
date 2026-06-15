@@ -5,6 +5,8 @@ import { WatchItem, WatchImage, WatchValuation, ComparableSale, CONDITION_COLORS
 import { useHideValues } from "@/lib/HideValuesContext";
 import EditWatchModal from "@/components/EditWatchModal";
 import InsuranceValueRow from "@/components/InsuranceValueRow";
+import SpecsSection from "@/components/forms/SpecsSection";
+import { watchConfig } from "@/lib/collections/watch";
 
 interface WatchDetailModalProps {
   item: WatchItem;
@@ -366,6 +368,20 @@ export default function WatchDetailModal({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* ── Specs Section ── */}
+          <div className="mt-6 pt-6 border-t border-border">
+            <SpecsSection
+              module="watches"
+              itemId={item.id}
+              specs={item.specs}
+              specsUpdatedAt={item.specs_updated_at}
+              template={watchConfig.specTemplate}
+              onUpdated={(specs, specs_updated_at) =>
+                onItemUpdated?.({ ...item, specs, specs_updated_at })
+              }
+            />
           </div>
 
           {/* ── Valuation Section ── */}

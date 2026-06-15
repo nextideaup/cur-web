@@ -12,9 +12,12 @@ import {
   CONDITION_COLORS,
 } from "@/lib/types";
 import { useEditImageList } from "@/lib/hooks/useEditImageList";
+import { useSpecsList } from "@/lib/hooks/useSpecsList";
+import { autoConfig } from "@/lib/collections/auto";
 import { uploadFiles, type UploadedFile } from "@/lib/api/uploadFiles";
 import ModalShell from "@/components/forms/ModalShell";
 import EditImagesEditor from "@/components/forms/EditImagesEditor";
+import SpecsEditor from "@/components/forms/SpecsEditor";
 import ModalActions, { SaveCheckIcon } from "@/components/forms/ModalActions";
 
 interface EditAutomobileModalProps {
@@ -68,6 +71,7 @@ export default function EditAutomobileModal({ item, onClose, onItemUpdated }: Ed
   });
 
   const editImages = useEditImageList<AutoImage>(item.images ?? []);
+  const specs = useSpecsList(item.specs);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -126,6 +130,7 @@ export default function EditAutomobileModal({ item, onClose, onItemUpdated }: Ed
         purchase_source: form.purchase_source.trim() || null,
         notes: form.notes.trim() || null,
         insure: form.insure,
+        specs: specs.derive(),
         images_to_delete: imagesToDelete,
         image_order: imageOrder,
         image_paths: uploadedFiles,
@@ -394,6 +399,8 @@ export default function EditAutomobileModal({ item, onClose, onItemUpdated }: Ed
             </span>
           </span>
         </label>
+
+        <SpecsEditor specs={specs} templateSuggestions={autoConfig.specTemplate} />
 
         <EditImagesEditor edit={editImages} />
 

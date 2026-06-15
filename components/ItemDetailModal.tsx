@@ -5,6 +5,8 @@ import { GuitarItem, GuitarImage, GuitarValuation, ComparableSale, CONDITION_COL
 import { useHideValues } from "@/lib/HideValuesContext";
 import EditItemModal from "@/components/EditItemModal";
 import InsuranceValueRow from "@/components/InsuranceValueRow";
+import SpecsSection from "@/components/forms/SpecsSection";
+import { guitarConfig } from "@/lib/collections/guitar";
 
 interface ItemDetailModalProps {
   item: GuitarItem;
@@ -359,6 +361,20 @@ export default function ItemDetailModal({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* ── Specs Section ── */}
+          <div className="mt-6 pt-6 border-t border-border">
+            <SpecsSection
+              module="guitars"
+              itemId={item.id}
+              specs={item.specs}
+              specsUpdatedAt={item.specs_updated_at}
+              template={guitarConfig.specTemplate}
+              onUpdated={(specs, specs_updated_at) =>
+                onItemUpdated?.({ ...item, specs, specs_updated_at })
+              }
+            />
           </div>
 
           {/* ── Valuation Section ── */}

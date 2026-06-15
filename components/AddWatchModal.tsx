@@ -11,9 +11,12 @@ import {
   CONDITION_COLORS,
 } from "@/lib/types";
 import { useImageUpload } from "@/lib/hooks/useImageUpload";
+import { useSpecsList } from "@/lib/hooks/useSpecsList";
+import { watchConfig } from "@/lib/collections/watch";
 import { uploadFiles, type UploadedFile } from "@/lib/api/uploadFiles";
 import ModalShell from "@/components/forms/ModalShell";
 import ImagesEditor from "@/components/forms/ImagesEditor";
+import SpecsEditor from "@/components/forms/SpecsEditor";
 import ModalActions from "@/components/forms/ModalActions";
 
 interface AddWatchModalProps {
@@ -72,6 +75,7 @@ export default function AddWatchModal({
   });
 
   const imageUpload = useImageUpload();
+  const specs = useSpecsList();
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -134,6 +138,7 @@ export default function AddWatchModal({
         link: form.link.trim() || null,
         notes: form.notes.trim() || null,
         insure: form.insure,
+        specs: specs.derive(),
         image_paths: uploadedFiles,
       };
 
@@ -425,6 +430,8 @@ export default function AddWatchModal({
             </span>
           </span>
         </label>
+
+        <SpecsEditor specs={specs} templateSuggestions={watchConfig.specTemplate} />
 
         <ImagesEditor upload={imageUpload} />
 

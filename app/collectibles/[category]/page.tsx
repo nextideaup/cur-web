@@ -339,6 +339,7 @@ export default function IoDCategoryPage() {
       {/* CUR-6: bulk-action bar. */}
       <BulkActionBar
         module="iod"
+        onSpecsGenerated={fetchItems}
         selectedIds={selectedIds}
         selectedInsuredCount={items.filter((i) => selectedIds.has(i.id) && i.insure).length}
         totalSelectableCount={items.length}
