@@ -35,32 +35,66 @@ interface SpecableItem {
   specs?: SpecEntry[] | null;
 }
 
-// Merge freshly-researched AI entries with the item's existing specs, keeping
-// every manual override and dropping any AI row that collides (case-insensitive
-// label) with one. Exported so the batch route / tests can reuse it.
+// Merge freshly-researched AI entries with the item's existing specs. Rules:
+//   - Manual overrides (source='manual') are always kept and win over any AI
+//     row with the same (case-insensitive) label.
+//   - Existing AI rows are refreshed IN PLACE with the new value, so the user's
+//     row order survives a refresh; stale AI rows the new research no longer
+//     returns are dropped.
+//   - Genuinely new AI labels are appended at the end, in the order returned.
+// This preserves display order across refreshes — a manually-corrected row no
+// longer jumps to the bottom each time "Refresh with AI" runs.
+// Exported so the batch route / tests can reuse it.
 export function mergeSpecs(
   existing: SpecEntry[] | null | undefined,
   aiEntries: { label: string; value: string }[],
 ): SpecEntry[] {
-  const manual = (existing ?? []).filter(
-    (e) => e?.source === "manual" && e.label?.trim() && e.value?.trim(),
-  );
-  const manualLabels = new Set(manual.map((e) => e.label.trim().toLowerCase()));
-
-  const seen = new Set<string>();
-  const ai: SpecEntry[] = [];
+  // Clean incoming AI entries into a label-keyed map (first wins), preserving
+  // their arrival order for appending new labels later.
+  const aiByLabel = new Map<string, SpecEntry>();
+  const aiOrder: string[] = [];
   for (const e of aiEntries ?? []) {
     if (!e || typeof e.label !== "string" || typeof e.value !== "string") continue;
     const label = e.label.trim();
     const value = e.value.trim();
     if (!label || !value) continue;
     const key = label.toLowerCase();
-    if (manualLabels.has(key) || seen.has(key)) continue; // manual wins; de-dupe AI
-    seen.add(key);
-    ai.push({ label, value, source: "ai" });
+    if (aiByLabel.has(key)) continue; // de-dupe AI labels
+    aiByLabel.set(key, { label, value, source: "ai" });
+    aiOrder.push(key);
   }
 
-  return [...ai, ...manual];
+  const result: SpecEntry[] = [];
+  const consumed = new Set<string>();
+
+  // Pass 1 — walk existing rows in their current order, preserving positions.
+  for (const e of existing ?? []) {
+    if (!e || typeof e.label !== "string" || !e.label.trim()) continue;
+    const key = e.label.trim().toLowerCase();
+    if (consumed.has(key)) continue; // collapse duplicate labels in stored data
+    if (e.source === "manual") {
+      if (!e.value?.trim()) continue; // drop empty manual rows
+      result.push({ label: e.label.trim(), value: e.value.trim(), source: "manual" });
+      consumed.add(key); // manual wins → any incoming AI row with this label is suppressed
+    } else {
+      // AI row: refresh in place if the new research still returns this label;
+      // otherwise it's stale and gets dropped.
+      const fresh = aiByLabel.get(key);
+      if (fresh) {
+        result.push(fresh);
+        consumed.add(key);
+      }
+    }
+  }
+
+  // Pass 2 — append genuinely new AI labels (not already placed above).
+  for (const key of aiOrder) {
+    if (consumed.has(key)) continue;
+    result.push(aiByLabel.get(key)!);
+    consumed.add(key);
+  }
+
+  return result;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

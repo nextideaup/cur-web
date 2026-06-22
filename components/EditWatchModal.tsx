@@ -137,7 +137,9 @@ export default function EditWatchModal({ item, onClose, onItemUpdated }: EditWat
         link: form.link.trim() || null,
         notes: form.notes.trim() || null,
         insure: form.insure,
-        specs: specs.derive(),
+        // Only send specs when the user actually edited them, so an unrelated
+        // field change doesn't re-stamp specs_updated_at.
+        ...(specs.isDirty() ? { specs: specs.derive() } : {}),
         images_to_delete: imagesToDelete,
         image_order: imageOrder,
         image_paths: uploadedFiles,

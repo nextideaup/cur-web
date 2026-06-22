@@ -14,7 +14,7 @@ const AUTO_CATEGORIES    = ["collection", "household"];
 const IOD_CATEGORIES     = ["fine-art", "memorabilia", "collectibles", "jewelry", "other"];
 const CONDITIONS         = ["Mint", "Excellent", "Very Good", "Good", "Fair", "Poor"];
 const INSURANCE_SOURCES  = ["ai", "alternate_from_user", "user_override"];
-const VALID_VERSIONS     = ["1.0", "1.1", "1.2"] as const;
+const VALID_VERSIONS     = ["1.0", "1.1", "1.2", "1.3"] as const;
 const VALID_MOD_STATUSES = ["unreviewed", "clean", "flagged", "approved", "blocked"];
 
 // CUR-9: coerce truthy/falsy values from various export shapes into a clean
@@ -63,6 +63,25 @@ function toNumber(v: unknown): number | null {
 
 function isNumericInput(v: unknown): boolean {
   return v == null || v === "" || toNumber(v) !== null;
+}
+
+// Specs (migration 019, v1.3): JSONB array of { label, value, source } rows.
+// AI-researched specs are expensive (web_search) to regenerate, so they must
+// round-trip like valuations and image-moderation metadata. Returns a JSON
+// string ready to bind to the jsonb column (cast ::jsonb), or null when there
+// are no usable rows. Mirrors the server-side cleaning in lib/specs-handler.ts
+// mergeSpecs: trim label/value, require both, coerce source to ai|manual.
+function normalizeSpecs(v: unknown): string | null {
+  if (!Array.isArray(v)) return null;
+  const clean = v
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
+    .map((e) => ({
+      label: typeof e.label === "string" ? e.label.trim() : "",
+      value: typeof e.value === "string" ? e.value.trim() : "",
+      source: e.source === "ai" ? "ai" : "manual",
+    }))
+    .filter((e) => e.label && e.value);
+  return clean.length > 0 ? JSON.stringify(clean) : null;
 }
 
 // ── Per-collection validators ─────────────────────────────────────────────────
@@ -145,16 +164,18 @@ async function insertGuitar(r: Record<string, unknown>, userId: string): Promise
       (id, user_id, category, brand, model, year, serial_number, condition,
        purchase_price, purchase_source, color_finish, short_description,
        link, notes, created_at,
-       insure, insurance_value, insurance_value_source, insurance_value_date, archived_at)
+       insure, insurance_value, insurance_value_source, insurance_value_date, archived_at,
+       specs, specs_updated_at)
      VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15::timestamptz, NOW()),
-       $16, $17, $18, $19, $20)
+       $16, $17, $18, $19, $20, $21::jsonb, $22::timestamptz)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
     [r.id || null, userId, normalizeSlug(r.category), r.brand, r.model, r.year || null, r.serial_number || null,
      normalizeCondition(r.condition) || "Good", toNumber(r.purchase_price), r.purchase_source || null,
      r.color_finish || null, r.short_description || null, r.link || null, r.notes || null, r.created_at || null,
      toBool(r.insure), toNumber(r.insurance_value), normalizeInsuranceSource(r.insurance_value_source),
-     r.insurance_value_date || null, r.archived_at || null],
+     r.insurance_value_date || null, r.archived_at || null,
+     normalizeSpecs(r.specs), r.specs_updated_at || null],
   );
   return result[0]?.id ?? null;
 }
@@ -166,9 +187,10 @@ async function insertWatch(r: Record<string, unknown>, userId: string): Promise<
        serial_number, condition, purchase_price, purchase_source, dial_color,
        country_of_manufacture, movement, bracelet_material, case_material,
        short_description, link, notes, created_at,
-       insure, insurance_value, insurance_value_source, insurance_value_date, archived_at)
+       insure, insurance_value, insurance_value_source, insurance_value_date, archived_at,
+       specs, specs_updated_at)
      VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, COALESCE($21::timestamptz, NOW()),
-       $22, $23, $24, $25, $26)
+       $22, $23, $24, $25, $26, $27::jsonb, $28::timestamptz)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
     [r.id || null, userId, normalizeSlug(r.category), r.brand, r.model, r.year || null, r.reference_number || null,
@@ -177,7 +199,8 @@ async function insertWatch(r: Record<string, unknown>, userId: string): Promise<
      r.country_of_manufacture || null, r.movement || null, r.bracelet_material || null,
      r.case_material || null, r.short_description || null, r.link || null, r.notes || null, r.created_at || null,
      toBool(r.insure), toNumber(r.insurance_value), normalizeInsuranceSource(r.insurance_value_source),
-     r.insurance_value_date || null, r.archived_at || null],
+     r.insurance_value_date || null, r.archived_at || null,
+     normalizeSpecs(r.specs), r.specs_updated_at || null],
   );
   return result[0]?.id ?? null;
 }
@@ -188,9 +211,10 @@ async function insertAuto(r: Record<string, unknown>, userId: string): Promise<s
       (id, user_id, category, brand, model, year, description, trim_level, engine,
        transmission, mileage, condition, body_style, color, vin, purchase_price,
        purchase_date, purchase_source, notes, created_at,
-       insure, insurance_value, insurance_value_source, insurance_value_date, archived_at)
+       insure, insurance_value, insurance_value_source, insurance_value_date, archived_at,
+       specs, specs_updated_at)
      VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, COALESCE($20::timestamptz, NOW()),
-       $21, $22, $23, $24, $25)
+       $21, $22, $23, $24, $25, $26::jsonb, $27::timestamptz)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
     [r.id || null, userId, normalizeSlug(r.category), r.brand, r.model, r.year || null, r.description || null,
@@ -198,7 +222,8 @@ async function insertAuto(r: Record<string, unknown>, userId: string): Promise<s
      normalizeCondition(r.condition) || null, r.body_style || null, r.color || null, r.vin || null,
      toNumber(r.purchase_price), r.purchase_date || null, r.purchase_source || null, r.notes || null, r.created_at || null,
      toBool(r.insure), toNumber(r.insurance_value), normalizeInsuranceSource(r.insurance_value_source),
-     r.insurance_value_date || null, r.archived_at || null],
+     r.insurance_value_date || null, r.archived_at || null,
+     normalizeSpecs(r.specs), r.specs_updated_at || null],
   );
   return result[0]?.id ?? null;
 }
@@ -209,16 +234,18 @@ async function insertIoD(r: Record<string, unknown>, userId: string): Promise<st
       (id, user_id, category, item_type, brand, short_description, long_description,
        year, condition, purchase_price, purchase_date, purchase_source, provenance,
        notes, created_at,
-       insure, insurance_value, insurance_value_source, insurance_value_date, archived_at)
+       insure, insurance_value, insurance_value_source, insurance_value_date, archived_at,
+       specs, specs_updated_at)
      VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15::timestamptz, NOW()),
-       $16, $17, $18, $19, $20)
+       $16, $17, $18, $19, $20, $21::jsonb, $22::timestamptz)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
     [r.id || null, userId, normalizeSlug(r.category), r.item_type || null, r.brand || null, r.short_description,
      r.long_description || null, r.year || null, normalizeCondition(r.condition) || null, toNumber(r.purchase_price),
      r.purchase_date || null, r.purchase_source || null, r.provenance || null, r.notes || null, r.created_at || null,
      toBool(r.insure), toNumber(r.insurance_value), normalizeInsuranceSource(r.insurance_value_source),
-     r.insurance_value_date || null, r.archived_at || null],
+     r.insurance_value_date || null, r.archived_at || null,
+     normalizeSpecs(r.specs), r.specs_updated_at || null],
   );
   return result[0]?.id ?? null;
 }
