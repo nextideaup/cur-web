@@ -6,6 +6,7 @@ import { useHideValues } from "@/lib/HideValuesContext";
 import EditAutomobileModal from "@/components/EditAutomobileModal";
 import InsuranceValueRow from "@/components/InsuranceValueRow";
 import SpecsSection from "@/components/forms/SpecsSection";
+import ListForSaleSection from "@/components/ListForSaleSection";
 import { autoConfig } from "@/lib/collections/auto";
 
 interface AutomobileDetailModalProps {
@@ -395,6 +396,11 @@ export default function AutomobileDetailModal({
                 onItemUpdated?.({ ...item, specs, specs_updated_at })
               }
             />
+          </div>
+
+          {/* ── Sell Section ── */}
+          <div className="px-6 pb-6 border-t border-border pt-5">
+            <ListForSaleSection module="automobiles" itemId={item.id} />
           </div>
 
           {/* Valuation section */}

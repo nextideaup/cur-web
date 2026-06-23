@@ -6,6 +6,7 @@ import { useHideValues } from "@/lib/HideValuesContext";
 import EditItemModal from "@/components/EditItemModal";
 import InsuranceValueRow from "@/components/InsuranceValueRow";
 import SpecsSection from "@/components/forms/SpecsSection";
+import ListForSaleSection from "@/components/ListForSaleSection";
 import { guitarConfig } from "@/lib/collections/guitar";
 
 interface ItemDetailModalProps {
@@ -375,6 +376,11 @@ export default function ItemDetailModal({
                 onItemUpdated?.({ ...item, specs, specs_updated_at })
               }
             />
+          </div>
+
+          {/* ── Sell Section ── */}
+          <div className="mt-6 pt-6 border-t border-border">
+            <ListForSaleSection module="guitars" itemId={item.id} />
           </div>
 
           {/* ── Valuation Section ── */}

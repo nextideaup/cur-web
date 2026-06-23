@@ -6,6 +6,7 @@ import { useHideValues } from "@/lib/HideValuesContext";
 import EditWatchModal from "@/components/EditWatchModal";
 import InsuranceValueRow from "@/components/InsuranceValueRow";
 import SpecsSection from "@/components/forms/SpecsSection";
+import ListForSaleSection from "@/components/ListForSaleSection";
 import { watchConfig } from "@/lib/collections/watch";
 
 interface WatchDetailModalProps {
@@ -382,6 +383,11 @@ export default function WatchDetailModal({
                 onItemUpdated?.({ ...item, specs, specs_updated_at })
               }
             />
+          </div>
+
+          {/* ── Sell Section ── */}
+          <div className="mt-6 pt-6 border-t border-border">
+            <ListForSaleSection module="watches" itemId={item.id} />
           </div>
 
           {/* ── Valuation Section ── */}

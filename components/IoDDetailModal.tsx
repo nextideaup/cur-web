@@ -6,6 +6,7 @@ import { useHideValues } from "@/lib/HideValuesContext";
 import EditIoDModal from "@/components/EditIoDModal";
 import InsuranceValueRow from "@/components/InsuranceValueRow";
 import SpecsSection from "@/components/forms/SpecsSection";
+import ListForSaleSection from "@/components/ListForSaleSection";
 import { iodConfig } from "@/lib/collections/iod";
 
 interface IoDDetailModalProps {
@@ -371,6 +372,11 @@ export default function IoDDetailModal({
                 onItemUpdated?.({ ...item, specs, specs_updated_at })
               }
             />
+          </div>
+
+          {/* ── Sell Section ── */}
+          <div className="mt-6 pt-6 border-t border-border px-6">
+            <ListForSaleSection module="iod" itemId={item.id} />
           </div>
 
           {/* Valuation section */}
