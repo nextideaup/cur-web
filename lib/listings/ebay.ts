@@ -1,0 +1,142 @@
+// eBay channel adapter (Sell Inventory API). Creates a DRAFT by doing the first
+// two steps of the listing flow and deliberately NOT publishing:
+//   1. PUT  /sell/inventory/v1/inventory_item/{sku}
+//   2. POST /sell/inventory/v1/offer            → returns offerId (unpublished)
+// We never call publishOffer, so nothing goes live — the offer sits in Seller
+// Hub as a draft for the user to review and publish.
+//
+// Auth is a user OAuth access token (Bearer) with the sell.inventory scope.
+// eBay needs account-specific identifiers to build an offer (category +
+// location + business policies); those live in the credential's `meta` and a
+// missing one raises ListingConfigError so the route can explain what to add.
+
+import type { Condition } from "@/lib/types";
+import { ListingConfigError, type ChannelMeta, type ListingChannel, type ListingInput, type ListingResult } from "./types";
+
+function baseUrl(meta: ChannelMeta): string {
+  return meta.sandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
+}
+
+function headers(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "Content-Language": "en-US",
+  };
+}
+
+// eBay condition enums (Inventory API). Mint maps to USED_EXCELLENT rather than
+// NEW — these items are pre-owned by definition in this app.
+const CONDITION_ENUM: Record<Condition, string> = {
+  Mint: "USED_EXCELLENT",
+  Excellent: "USED_EXCELLENT",
+  "Very Good": "USED_VERY_GOOD",
+  Good: "USED_GOOD",
+  Fair: "USED_ACCEPTABLE",
+  Poor: "FOR_PARTS_OR_NOT_WORKING",
+};
+
+async function errorText(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    const j = JSON.parse(text) as { errors?: { message?: string; longMessage?: string }[] };
+    const e = j.errors?.[0];
+    if (e) return e.longMessage || e.message || text.slice(0, 300);
+  } catch { /* non-JSON */ }
+  return text.slice(0, 300) || `HTTP ${res.status}`;
+}
+
+export const ebayChannel: ListingChannel = {
+  slug: "ebay",
+  label: "eBay",
+
+  async createDraft(input: ListingInput, token: string, meta: ChannelMeta): Promise<ListingResult> {
+    const base = baseUrl(meta);
+    const marketplaceId = meta.marketplaceId || "EBAY_US";
+    const currency = meta.currency || input.currency || "USD";
+
+    // An offer can't be built without these. Collect all missing ones up front
+    // so the user fixes the config in a single pass.
+    const missing: string[] = [];
+    if (!meta.categoryId) missing.push("categoryId (leaf category)");
+    if (!meta.merchantLocationKey) missing.push("merchantLocationKey");
+    if (!meta.fulfillmentPolicyId) missing.push("fulfillmentPolicyId");
+    if (!meta.paymentPolicyId) missing.push("paymentPolicyId");
+    if (!meta.returnPolicyId) missing.push("returnPolicyId");
+    if (missing.length > 0) {
+      throw new ListingConfigError(
+        `eBay needs more account config before it can draft a listing. Missing: ${missing.join(", ")}. Add these in the eBay connection settings (from the eBay Account & Inventory Location APIs).`,
+      );
+    }
+    if (!input.condition) {
+      throw new ListingConfigError("eBay needs a condition. Set the item's condition before listing.");
+    }
+    if (input.price == null) {
+      throw new ListingConfigError("eBay needs a price. Add an AI or manual valuation, or set a purchase price, before listing.");
+    }
+
+    // Aspects: Brand/Model + each spec as a single-value aspect. eBay enforces
+    // required aspects only at publish time, so a draft tolerates a partial set.
+    const aspects: Record<string, string[]> = {};
+    if (input.brand) aspects["Brand"] = [input.brand];
+    if (input.model) aspects["Model"] = [input.model];
+    for (const s of input.specs) {
+      if (s.label?.trim() && s.value?.trim()) aspects[s.label.trim()] = [s.value.trim()];
+    }
+
+    // Step 1 — inventory item (idempotent on SKU).
+    const invRes = await fetch(`${base}/sell/inventory/v1/inventory_item/${encodeURIComponent(input.sku)}`, {
+      method: "PUT",
+      headers: headers(token),
+      body: JSON.stringify({
+        availability: { shipToLocationAvailability: { quantity: 1 } },
+        condition: CONDITION_ENUM[input.condition],
+        product: {
+          title: input.title.slice(0, 80), // eBay title cap
+          description: input.description,
+          aspects,
+          imageUrls: input.photoUrls.slice(0, 24), // eBay max 24 images
+        },
+      }),
+    });
+    if (!invRes.ok) {
+      throw new Error(`eBay inventory item create failed (HTTP ${invRes.status}): ${await errorText(invRes)}`);
+    }
+
+    // Step 2 — offer (unpublished). NOT followed by publishOffer.
+    const offerBody = {
+      sku: input.sku,
+      marketplaceId,
+      format: "FIXED_PRICE",
+      availableQuantity: 1,
+      categoryId: meta.categoryId,
+      listingDescription: input.description,
+      listingPolicies: {
+        fulfillmentPolicyId: meta.fulfillmentPolicyId,
+        paymentPolicyId: meta.paymentPolicyId,
+        returnPolicyId: meta.returnPolicyId,
+      },
+      pricingSummary: { price: { value: input.price.toFixed(2), currency } },
+      merchantLocationKey: meta.merchantLocationKey,
+    };
+    const offerRes = await fetch(`${base}/sell/inventory/v1/offer`, {
+      method: "POST",
+      headers: headers(token),
+      body: JSON.stringify(offerBody),
+    });
+    if (!offerRes.ok) {
+      throw new Error(`eBay offer create failed (HTTP ${offerRes.status}): ${await errorText(offerRes)}`);
+    }
+    const offer = (await offerRes.json()) as { offerId?: string };
+    const offerId = offer.offerId ?? null;
+
+    return {
+      externalId: offerId,
+      // Unpublished offers have no public URL; point at Seller Hub drafts.
+      externalUrl: meta.sandbox ? null : "https://www.ebay.com/sh/lst/drafts",
+      state: "draft",
+      payload: { inventory_item_sku: input.sku, offer: offerBody },
+    };
+  },
+};
