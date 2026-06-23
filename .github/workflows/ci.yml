@@ -159,6 +159,21 @@ jobs:
             --error \
             --sarif --output=semgrep.sarif
 
+      - name: Semgrep findings (text, on failure)
+        # The gate step above writes findings only to the SARIF artifact, so a
+        # failure shows a count but not the offending rule/file in the log. This
+        # failure-only re-run prints the findings as text for quick triage. It
+        # never affects the gate (no --error, `|| true`).
+        if: failure()
+        run: |
+          semgrep scan \
+            --config=p/secrets \
+            --config=p/typescript \
+            --config=p/javascript \
+            --config=p/react \
+            --config=p/nextjs \
+            --severity=ERROR || true
+
       - name: Upload Semgrep SARIF artifact
         if: always()
         uses: actions/upload-artifact@v4
