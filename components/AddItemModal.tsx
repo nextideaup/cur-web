@@ -11,9 +11,12 @@ import {
   CONDITION_COLORS,
 } from "@/lib/types";
 import { useImageUpload } from "@/lib/hooks/useImageUpload";
+import { useSpecsList } from "@/lib/hooks/useSpecsList";
 import { uploadFiles, type UploadedFile } from "@/lib/api/uploadFiles";
+import { guitarConfig } from "@/lib/collections/guitar";
 import ModalShell from "@/components/forms/ModalShell";
 import ImagesEditor from "@/components/forms/ImagesEditor";
+import SpecsEditor from "@/components/forms/SpecsEditor";
 import ModalActions from "@/components/forms/ModalActions";
 
 interface AddItemModalProps {
@@ -60,6 +63,7 @@ export default function AddItemModal({
   });
 
   const imageUpload = useImageUpload();
+  const specs = useSpecsList();
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -116,6 +120,7 @@ export default function AddItemModal({
         link: form.link.trim() || null,
         notes: form.notes.trim() || null,
         insure: form.insure,
+        specs: specs.derive(),
         image_paths: uploadedFiles,
       };
 
@@ -338,6 +343,8 @@ export default function AddItemModal({
             </span>
           </span>
         </label>
+
+        <SpecsEditor specs={specs} templateSuggestions={guitarConfig.specTemplate} />
 
         <ImagesEditor upload={imageUpload} />
 

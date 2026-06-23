@@ -5,6 +5,8 @@ import { AutoItem, AutoImage, ComparableSale, CONDITION_COLORS, AUTO_CATEGORY_LA
 import { useHideValues } from "@/lib/HideValuesContext";
 import EditAutomobileModal from "@/components/EditAutomobileModal";
 import InsuranceValueRow from "@/components/InsuranceValueRow";
+import SpecsSection from "@/components/forms/SpecsSection";
+import { autoConfig } from "@/lib/collections/auto";
 
 interface AutomobileDetailModalProps {
   item: AutoItem;
@@ -379,6 +381,20 @@ export default function AutomobileDetailModal({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* ── Specs Section ── */}
+          <div className="px-6 pb-6 border-t border-border pt-5">
+            <SpecsSection
+              module="automobiles"
+              itemId={item.id}
+              specs={item.specs}
+              specsUpdatedAt={item.specs_updated_at}
+              template={autoConfig.specTemplate}
+              onUpdated={(specs, specs_updated_at) =>
+                onItemUpdated?.({ ...item, specs, specs_updated_at })
+              }
+            />
           </div>
 
           {/* Valuation section */}

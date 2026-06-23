@@ -339,6 +339,7 @@ export default function AutoCategoryPage() {
       {/* CUR-6: bulk-action bar. */}
       <BulkActionBar
         module="automobiles"
+        onSpecsGenerated={fetchItems}
         selectedIds={selectedIds}
         selectedInsuredCount={items.filter((i) => selectedIds.has(i.id) && i.insure).length}
         totalSelectableCount={items.length}

@@ -97,6 +97,14 @@ function normalizeField(value: unknown, spec: FieldSpec): unknown {
   if (spec.type === "boolean") {
     return value === true || value === "true";
   }
+  // JSONB columns (the freeform `specs` array). node-postgres binds a JS array
+  // as a Postgres array literal, which a jsonb column rejects — so serialize it
+  // ourselves. An empty array collapses to SQL NULL to keep "no specs" tidy.
+  if (spec.type === "jsonb") {
+    if (Array.isArray(value) && value.length === 0) return null;
+    if (typeof value === "object") return JSON.stringify(value);
+    return null;
+  }
   if (spec.trim && typeof value === "string") {
     const trimmed = value.trim();
     return trimmed || null;
@@ -265,12 +273,18 @@ export function makeListHandlers(c: CollectionConfig) {
       }
 
       const columns = ["category", ...c.fields.map((f) => f.name), "user_id"];
-      const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
       const values: unknown[] = [
         body.category,
         ...c.fields.map((f) => normalizeField(body[f.name], f)),
         session.user.id,
       ];
+      // Stamp specs_updated_at when the create payload carries specs (CUR-1).
+      // Bound as a JS Date — node-postgres maps it to timestamptz.
+      if (Array.isArray(body.specs) && body.specs.length > 0) {
+        columns.push("specs_updated_at");
+        values.push(new Date());
+      }
+      const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
 
       const item = await queryOne<{ id: string }>(
         `INSERT INTO ${c.table} (${columns.join(", ")})
@@ -423,6 +437,12 @@ export function makeItemHandlers(c: CollectionConfig) {
         setClauses.push(`${f.name} = $${nextPlaceholder}`);
         values.push(normalizeField(body[f.name], f));
         nextPlaceholder++;
+      }
+      // Stamp specs_updated_at whenever this PATCH touches specs (CUR-1), so a
+      // manual edit in the Edit modal records a fresh timestamp the same way an
+      // AI generation does.
+      if ("specs" in body) {
+        setClauses.push("specs_updated_at = NOW()");
       }
       if (c.patchSetUpdatedAt && setClauses.length > 0) {
         setClauses.push("updated_at = NOW()");

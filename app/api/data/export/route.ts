@@ -192,10 +192,14 @@ export async function POST(req: NextRequest) {
     );
 
     const payload = {
+      // 1.3: item `specs` (JSONB label/value/source rows, migration 019) now
+      // round-trip. They ride along automatically via `SELECT *`; the importer
+      // persists them (1.0–1.3 all accepted — older payloads simply have no
+      // `specs`).
       // 1.2: image rows now round-trip (metadata always; bytes when
       // `include_image_data: true`). Importer accepts 1.0/1.1/1.2 — older
       // payloads simply have no `images` array.
-      version: "1.2",
+      version: "1.3",
       exported_at: new Date().toISOString(),
       // Surfaces the byte-embedding choice in the payload itself so a viewer
       // (or future tooling) can tell at a glance whether this file is a

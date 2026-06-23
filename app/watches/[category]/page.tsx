@@ -384,6 +384,7 @@ export default function WatchCategoryPage() {
       {/* CUR-6: bulk-action bar. */}
       <BulkActionBar
         module="watches"
+        onSpecsGenerated={fetchItems}
         selectedIds={selectedIds}
         selectedInsuredCount={items.filter((i) => selectedIds.has(i.id) && i.insure).length}
         totalSelectableCount={items.length}

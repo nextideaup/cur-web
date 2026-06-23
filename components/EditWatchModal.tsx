@@ -12,9 +12,12 @@ import {
   CONDITION_COLORS,
 } from "@/lib/types";
 import { useEditImageList } from "@/lib/hooks/useEditImageList";
+import { useSpecsList } from "@/lib/hooks/useSpecsList";
+import { watchConfig } from "@/lib/collections/watch";
 import { uploadFiles, type UploadedFile } from "@/lib/api/uploadFiles";
 import ModalShell from "@/components/forms/ModalShell";
 import EditImagesEditor from "@/components/forms/EditImagesEditor";
+import SpecsEditor from "@/components/forms/SpecsEditor";
 import ModalActions, { SaveCheckIcon } from "@/components/forms/ModalActions";
 
 interface EditWatchModalProps {
@@ -69,6 +72,7 @@ export default function EditWatchModal({ item, onClose, onItemUpdated }: EditWat
   });
 
   const editImages = useEditImageList<WatchImage>(item.images ?? []);
+  const specs = useSpecsList(item.specs);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -133,6 +137,9 @@ export default function EditWatchModal({ item, onClose, onItemUpdated }: EditWat
         link: form.link.trim() || null,
         notes: form.notes.trim() || null,
         insure: form.insure,
+        // Only send specs when the user actually edited them, so an unrelated
+        // field change doesn't re-stamp specs_updated_at.
+        ...(specs.isDirty() ? { specs: specs.derive() } : {}),
         images_to_delete: imagesToDelete,
         image_order: imageOrder,
         image_paths: uploadedFiles,
@@ -419,6 +426,8 @@ export default function EditWatchModal({ item, onClose, onItemUpdated }: EditWat
             </span>
           </span>
         </label>
+
+        <SpecsEditor specs={specs} templateSuggestions={watchConfig.specTemplate} />
 
         <EditImagesEditor edit={editImages} />
 

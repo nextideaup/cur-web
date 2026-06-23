@@ -8,6 +8,24 @@ export interface ComparableSale {
   listing_type?: "sold" | "for_sale";
 }
 
+// A single freeform spec row (migration 019 / CUR-1 flip-sell groundwork).
+// Stored in the `specs` JSONB array on every item table.
+//   - source "ai":     produced by the per-module specs handler (web_search).
+//   - source "manual": user-entered; survives AI refreshes (AI re-runs replace
+//                      only the 'ai' rows, never a manual override).
+export interface SpecEntry {
+  label: string;
+  value: string;
+  source: "ai" | "manual";
+}
+
+// Mixed into every item type below so the shared SpecsEditor / SpecsSection can
+// accept any item. `specs` is null until the first AI generation or manual save.
+export interface SpecFields {
+  specs?: SpecEntry[] | null;
+  specs_updated_at?: string | null;
+}
+
 export interface GuitarValuation {
   id: string;
   guitar_item_id: string;
@@ -65,7 +83,7 @@ export interface GuitarImage {
   created_at: string;
 }
 
-export interface GuitarItem extends InsuranceFields {
+export interface GuitarItem extends InsuranceFields, SpecFields {
   id: string;
   category: GuitarCategory;
   brand: string;
@@ -152,7 +170,7 @@ export interface WatchImage {
   created_at: string;
 }
 
-export interface WatchItem extends InsuranceFields {
+export interface WatchItem extends InsuranceFields, SpecFields {
   id: string;
   category: WatchCategory;
   brand: string;
@@ -301,7 +319,7 @@ export interface AutoImage {
   created_at: string;
 }
 
-export interface AutoItem extends InsuranceFields {
+export interface AutoItem extends InsuranceFields, SpecFields {
   id: string;
   category: AutoCategory;
   brand: string;
@@ -353,7 +371,7 @@ export interface IoDImage {
   created_at: string;
 }
 
-export interface IoDItem extends InsuranceFields {
+export interface IoDItem extends InsuranceFields, SpecFields {
   id: string;
   category: IoDCategory;
   item_type: string | null;
