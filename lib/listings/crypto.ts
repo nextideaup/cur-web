@@ -18,6 +18,10 @@
 import crypto from "crypto";
 
 const ALGO = "aes-256-gcm";
+// Pin the GCM authentication tag to the full 16 bytes. Passing authTagLength to
+// both cipher and decipher (and rejecting any other length on decrypt) stops a
+// truncated-tag forgery — a shorter tag is far easier to brute-force.
+const AUTH_TAG_LENGTH = 16;
 let cachedKey: Buffer | null = null;
 
 function resolveKey(): Buffer {
@@ -58,7 +62,7 @@ function resolveKey(): Buffer {
 export function encryptToken(plaintext: string): string {
   const key = resolveKey();
   const iv = crypto.randomBytes(12); // 96-bit nonce, standard for GCM
-  const cipher = crypto.createCipheriv(ALGO, key, iv);
+  const cipher = crypto.createCipheriv(ALGO, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return [iv.toString("base64"), authTag.toString("base64"), ciphertext.toString("base64")].join(":");
@@ -70,8 +74,12 @@ export function decryptToken(stored: string): string {
   if (!ivB64 || !tagB64 || !dataB64) {
     throw new Error("Malformed encrypted token");
   }
-  const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(ivB64, "base64"));
-  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  const tag = Buffer.from(tagB64, "base64");
+  if (tag.length !== AUTH_TAG_LENGTH) {
+    throw new Error("Malformed encrypted token (bad auth tag length)");
+  }
+  const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(ivB64, "base64"), { authTagLength: AUTH_TAG_LENGTH });
+  decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]).toString("utf8");
 }
 
