@@ -37,9 +37,13 @@ export default function ListForSaleSection({
   initialIntro,
   initialFooter,
   initialPackage,
+  initialSellPrice,
+  userPrice,
+  aiPrice,
   onIntroSaved,
   onFooterSaved,
   onPackageSaved,
+  onSellPriceSaved,
 }: {
   module: string;
   itemId: string;
@@ -47,14 +51,61 @@ export default function ListForSaleSection({
   initialIntro?: string | null;
   initialFooter?: string | null;
   initialPackage?: { weight?: number | string | null; length?: number | string | null; width?: number | string | null; height?: number | string | null };
+  // "Sell Price" seed values. initialSellPrice = the saved override (item.listing_price);
+  // when unset the field defaults to userPrice, then aiPrice.
+  initialSellPrice?: number | string | null;
+  userPrice?: number | null;
+  aiPrice?: number | null;
   onIntroSaved?: (intro: string) => void;
   onFooterSaved?: (footer: string) => void;
   onPackageSaved?: (pkg: { weight: string; length: string; width: string; height: string }) => void;
+  onSellPriceSaved?: (price: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const [channels, setChannels] = useState<ChannelStatus[]>([]);
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  // Sell Price — defaults to the saved override, else the user value, else the
+  // AI estimate. Used as the listing price when drafting (server falls back to
+  // the same precedence when this is left blank).
+  const priceToStr = (v: number | string | null | undefined) => (v == null || v === "" ? "" : String(v));
+  const sellPriceDefault = priceToStr(initialSellPrice ?? userPrice ?? aiPrice);
+  const [sellPrice, setSellPrice] = useState(sellPriceDefault);
+  const sellPriceSource = initialSellPrice != null && initialSellPrice !== ""
+    ? "saved"
+    : userPrice != null ? "your value" : aiPrice != null ? "AI estimate" : null;
+  const [sellPriceBusy, setSellPriceBusy] = useState(false);
+  const [sellPriceMsg, setSellPriceMsg] = useState("");
+
+  async function saveSellPrice() {
+    setSellPriceBusy(true);
+    setError("");
+    setSellPriceMsg("");
+    try {
+      const trimmed = sellPrice.trim();
+      const parsed = trimmed === "" ? null : parseFloat(trimmed);
+      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) {
+        throw new Error("Enter a valid price");
+      }
+      const res = await fetch(`/api/${module}/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listing_price: parsed }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not save sell price");
+      }
+      setSellPriceMsg(parsed == null ? "Cleared — using default" : "Saved");
+      onSellPriceSaved?.(parsed == null ? "" : String(parsed));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save sell price");
+    } finally {
+      setSellPriceBusy(false);
+    }
+  }
 
   // Listing intro (stored on the item, reused by both channels).
   const [intro, setIntro] = useState(initialIntro ?? "");
@@ -314,11 +365,70 @@ export default function ListForSaleSection({
 
   const isConnected = (ch: string) => channels.find((c) => c.channel === ch)?.connected ?? false;
 
+  const fmtPrice = (s: string) => {
+    const n = parseFloat(s);
+    if (!Number.isFinite(n)) return null;
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+  };
+
   return (
     <div>
-      <h3 className="text-sm font-medium text-text-muted mb-3">Sell</h3>
+      {/* Collapsible header — this section has grown large, so it defaults
+          collapsed with an at-a-glance summary (sell price + listing count). */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="w-full flex items-center gap-2 text-left"
+      >
+        <svg className={`w-4 h-4 text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        <h3 className="text-sm font-medium text-text-muted">Sell</h3>
+        {!expanded && (
+          <span className="ml-auto flex items-center gap-2">
+            {fmtPrice(sellPrice) && <span className="text-xs font-mono text-text-muted">{fmtPrice(sellPrice)}</span>}
+            {listings.length > 0 && (
+              <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-surface-2 text-text-dim">
+                {listings.length} listing{listings.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </span>
+        )}
+      </button>
 
+      {expanded && (
+      <div className="mt-3">
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+
+      {/* Sell price — the listing price; defaults to your value, else the AI
+          estimate. Server falls back to the same precedence when left blank. */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-1.5">
+          <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide">Sell price</h4>
+          {sellPriceMsg && <span className="text-xs text-emerald-400">✓ {sellPriceMsg}</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-dim text-sm">$</span>
+            <input
+              value={sellPrice}
+              onChange={(e) => { setSellPrice(e.target.value); if (sellPriceMsg) setSellPriceMsg(""); }}
+              placeholder="0"
+              inputMode="decimal"
+              className={`${inputCls} pl-6`}
+            />
+          </div>
+          <button onClick={saveSellPrice} disabled={sellPriceBusy} className={btnCls}>
+            {sellPriceBusy ? "Saving…" : "Save price"}
+          </button>
+        </div>
+        {sellPriceSource && (
+          <p className="text-[11px] text-text-dim mt-1">
+            {sellPriceSource === "saved" ? "Your saved sell price." : `Defaulted from your ${sellPriceSource}. Edit to override.`}
+          </p>
+        )}
+      </div>
 
       {/* Listing intro — a shared opening paragraph for both channels. */}
       <div className="mb-4">
@@ -495,6 +605,8 @@ export default function ListForSaleSection({
         <p className="text-xs text-text-dim">
           No listings yet. Drafts are created unpublished — you review and publish on the marketplace.
         </p>
+      )}
+      </div>
       )}
     </div>
   );

@@ -35,6 +35,9 @@ export interface SpecFields {
   package_length_in?: number | string | null;
   package_width_in?: number | string | null;
   package_height_in?: number | string | null;
+  // "Sell Price" used when drafting a marketplace listing (migration 025).
+  // Null = fall back to the user value, then the AI value, at post time.
+  listing_price?: number | string | null;
 }
 
 export interface GuitarValuation {

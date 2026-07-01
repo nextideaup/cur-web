@@ -33,7 +33,7 @@ async function assembleListing(c: CollectionConfig, userId: string, id: string, 
     return { ok: false, response: NextResponse.json({ error: "channel must be 'reverb' or 'ebay'" }, { status: 400 }) };
   }
 
-  const item = await queryOne<RawListItem & { purchase_price?: number | null }>(
+  const item = await queryOne<RawListItem & { purchase_price?: number | null; listing_price?: number | string | null }>(
     `SELECT * FROM ${c.table} WHERE id = $1 AND user_id = $2`,
     [id, userId],
   );
@@ -63,14 +63,20 @@ async function assembleListing(c: CollectionConfig, userId: string, id: string, 
     }
   }
 
+  // Price precedence: the explicit "Sell Price" the seller set on the item wins.
+  // Otherwise fall back to their latest valuation, preferring a user-set value
+  // over the AI estimate (matches the Sell Price default shown in the UI), then
+  // finally the purchase price.
   const latest = await queryOne<{ price: string | number }>(
     `SELECT price FROM ${c.valuationsTable}
       WHERE ${c.valuationFkColumn} = $1
-      ORDER BY (valuation_type = 'ai') DESC, created_at DESC LIMIT 1`,
+      ORDER BY (valuation_type = 'user') DESC, created_at DESC LIMIT 1`,
     [id],
   );
+  const listingPrice = item.listing_price != null && item.listing_price !== "" ? Number(item.listing_price) : null;
   const price =
-    latest?.price != null ? Number(latest.price)
+    listingPrice != null && Number.isFinite(listingPrice) ? listingPrice
+    : latest?.price != null ? Number(latest.price)
     : item.purchase_price != null ? Number(item.purchase_price)
     : null;
 

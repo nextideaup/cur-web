@@ -387,7 +387,7 @@ export default function WatchDetailModal({
 
           {/* ── Sell Section ── */}
           <div className="mt-6 pt-6 border-t border-border">
-            <ListForSaleSection module="watches" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} initialFooter={item.listing_footer} onIntroSaved={(v) => onItemUpdated?.({ ...item, listing_intro: v })} onFooterSaved={(v) => onItemUpdated?.({ ...item, listing_footer: v })} initialPackage={{ weight: item.package_weight_lb, length: item.package_length_in, width: item.package_width_in, height: item.package_height_in }} onPackageSaved={(p) => onItemUpdated?.({ ...item, package_weight_lb: p.weight, package_length_in: p.length, package_width_in: p.width, package_height_in: p.height })} />
+            <ListForSaleSection module="watches" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} initialFooter={item.listing_footer} onIntroSaved={(v) => onItemUpdated?.({ ...item, listing_intro: v })} onFooterSaved={(v) => onItemUpdated?.({ ...item, listing_footer: v })} initialPackage={{ weight: item.package_weight_lb, length: item.package_length_in, width: item.package_width_in, height: item.package_height_in }} onPackageSaved={(p) => onItemUpdated?.({ ...item, package_weight_lb: p.weight, package_length_in: p.length, package_width_in: p.width, package_height_in: p.height })} initialSellPrice={item.listing_price} userPrice={item.latest_user_price} aiPrice={item.latest_ai_price} onSellPriceSaved={(v) => onItemUpdated?.({ ...item, listing_price: v })} />
           </div>
 
           {/* ── Valuation Section ── */}
