@@ -114,6 +114,26 @@ export const reverbChannel: ListingChannel = {
       body.price = { amount: input.price.toFixed(2), currency: input.currency };
     }
 
+    // Package weight + dimensions (best-effort). eBay requires these to publish
+    // and takes them as structured fields; Reverb centers shipping on shipping
+    // PROFILES (which can't be created over the API) or flat shipping_rates, so
+    // a per-listing weight/dimensions write field is not clearly documented.
+    // We send them on the seller's captured data anyway, using Reverb's
+    // { value, unit } convention (mirrors price: { amount, currency }). Reverb
+    // ignores unknown keys, so this is safe for items without package data
+    // (guarded below) and shouldn't break the draft if the field names are off —
+    // to be confirmed against a live draft. Weight in lbs, dimensions in inches.
+    if (input.packageWeightLb != null) {
+      body.weight = { value: input.packageWeightLb, unit: "lbs" };
+    }
+    if (input.packageLengthIn != null && input.packageWidthIn != null && input.packageHeightIn != null) {
+      body.package_dimensions = {
+        length: { value: input.packageLengthIn, unit: "inches" },
+        width: { value: input.packageWidthIn, unit: "inches" },
+        height: { value: input.packageHeightIn, unit: "inches" },
+      };
+    }
+
     const res = await fetch(`${base}/api/listings`, {
       method: "POST",
       headers: headers(token),
