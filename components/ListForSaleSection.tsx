@@ -51,6 +51,21 @@ export default function ListForSaleSection({ module, itemId }: { module: string;
     loadListings();
   }, [loadListings]);
 
+  async function removeListing(listingId: string) {
+    if (!confirm("Remove this listing from Vault 1?\n\nThis only clears the record here — it won't change anything on the marketplace.")) return;
+    setError("");
+    try {
+      const res = await fetch(`/api/${module}/${itemId}/list?listingId=${encodeURIComponent(listingId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not remove listing");
+      }
+      await loadListings();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove listing");
+    }
+  }
+
   async function listOn(channel: "reverb" | "ebay") {
     setBusy(channel);
     setError("");
@@ -137,6 +152,16 @@ export default function ListForSaleSection({ module, itemId }: { module: string;
                 <span className="text-text-dim">draft created</span>
               )}
               <span className="text-text-dim ml-auto shrink-0">{new Date(l.created_at).toLocaleDateString()}</span>
+              <button
+                onClick={() => removeListing(l.id)}
+                aria-label="Remove listing record"
+                title="Remove from Vault 1 (doesn't affect the marketplace)"
+                className="shrink-0 text-text-dim hover:text-red-400 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           ))}
         </div>
