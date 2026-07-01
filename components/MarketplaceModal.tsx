@@ -98,11 +98,14 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
 
   // Fetch the seller's eBay locations + policies to populate the dropdowns, and
   // auto-select any setting that has exactly one option and isn't set yet.
-  async function loadEbayOptions(marketplaceId: string) {
+  async function loadEbayOptions(marketplaceId: string, announce = false) {
     setOptionsLoading(true);
     try {
       const res = await fetch(`/api/marketplace/ebay/account-options?marketplaceId=${encodeURIComponent(marketplaceId || "EBAY_US")}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        if (announce) setMsg("Couldn’t reach eBay to re-detect. Try again in a moment.");
+        return;
+      }
       const data = (await res.json()) as EbayAccountOptions;
       setEbayOptions(data);
       const only = (opts: EbayOption[]) => (opts?.length === 1 ? opts[0].id : "");
@@ -113,6 +116,15 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
         paymentPolicyId: m.paymentPolicyId || only(data.paymentPolicies),
         returnPolicyId: m.returnPolicyId || only(data.returnPolicies),
       }));
+      if (announce) {
+        if (data.needs_reauth) {
+          setMsg("Reconnect eBay to read your policies — the connection is missing the account-read permission.");
+        } else {
+          setMsg(
+            `Re-detected from eBay: ${data.fulfillmentPolicies.length} shipping, ${data.paymentPolicies.length} payment, ${data.returnPolicies.length} return; ${data.locations.length} location(s).`,
+          );
+        }
+      }
     } finally {
       setOptionsLoading(false);
     }
@@ -309,12 +321,19 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
                   <input value={ebayMeta.categoryId} onChange={(e) => setEbayMeta({ ...ebayMeta, categoryId: e.target.value })} placeholder="auto-detected per item" className={inputCls} />
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button onClick={saveEbayMeta} disabled={busy === "ebay"} className={btnCls}>
                   {busy === "ebay" ? "Saving…" : "Save eBay settings"}
                 </button>
-                <button onClick={() => loadEbayOptions(ebayMeta.marketplaceId)} disabled={optionsLoading} className="text-xs text-text-muted hover:text-text disabled:opacity-50">
-                  {optionsLoading ? "Refreshing…" : "Refresh from eBay"}
+                <button
+                  onClick={() => loadEbayOptions(ebayMeta.marketplaceId, true)}
+                  disabled={optionsLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-text border border-border hover:border-accent/40 hover:text-accent disabled:opacity-50 transition-colors"
+                >
+                  <svg className={`w-3.5 h-3.5 ${optionsLoading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M3.985 19.644v-4.992h4.992m-4.005-7.51A8.25 8.25 0 0118.79 6.13M19.02 16.372A8.25 8.25 0 015.21 17.87" />
+                  </svg>
+                  {optionsLoading ? "Re-detecting…" : "Re-detect policies & locations"}
                 </button>
               </div>
             </>
