@@ -1,9 +1,29 @@
 "use client";
 
+import { useState } from "react";
 import { GuitarItem, CONDITION_COLORS } from "@/lib/types";
 import { useHideValues } from "@/lib/HideValuesContext";
 import SelectionCheckbox from "@/components/SelectionCheckbox";
 import SortableHeader from "@/components/forms/SortableHeader";
+
+// Small primary-photo thumbnail for the first column. Own error state so a
+// missing/broken image falls back to a placeholder without affecting the row.
+function RowThumb({ item }: { item: GuitarItem }) {
+  const [err, setErr] = useState(false);
+  const img = item.images?.find((i) => i.is_primary) ?? item.images?.[0];
+  return (
+    <div className="w-10 h-10 rounded-md overflow-hidden bg-surface-2 flex items-center justify-center shrink-0">
+      {img && !err ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={img.path} alt="" className="w-full h-full object-cover" onError={() => setErr(true)} />
+      ) : (
+        <svg className="w-5 h-5 text-text-dim" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
+        </svg>
+      )}
+    </div>
+  );
+}
 
 const fmtRaw = (price: number | null | undefined) => {
   if (price == null) return "—";
@@ -76,6 +96,7 @@ export default function GuitarListView({
                 <SelectionCheckbox state={headerState} onChange={onSelectAllToggle!} header />
               </th>
             )}
+            <th className="px-4 py-3 w-14 text-left" />
             {COLUMNS.map((col) => (
               <SortableHeader
                 key={col.label}
@@ -108,6 +129,7 @@ export default function GuitarListView({
                     />
                   </td>
                 )}
+                <td className="px-4 py-3"><RowThumb item={item} /></td>
                 <td className="px-4 py-3 text-text-muted whitespace-nowrap">{item.year ?? "—"}</td>
                 <td className="px-4 py-3 text-text font-medium whitespace-nowrap">{item.brand}</td>
                 <td className="px-4 py-3 text-text whitespace-nowrap">{item.model}</td>
