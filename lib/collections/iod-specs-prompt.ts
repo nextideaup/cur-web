@@ -13,5 +13,6 @@ export function iodSpecsPrompt(item: IoDItem): string {
     template: iodConfig.specTemplate,
     extraGuidance:
       "Items here are often unique — focus on attributes that establish identity and authenticity (medium, dimensions, edition/numbering, markings, provenance). Omit fields that don't apply to this kind of object.",
+    ownerNotes: item.notes,
   });
 }

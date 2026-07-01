@@ -13,5 +13,6 @@ export function watchSpecsPrompt(item: WatchItem): string {
     template: watchConfig.specTemplate,
     extraGuidance:
       "Use the reference number to pin down the exact variant when available; movement caliber and case dimensions are the highest-value fields for resale.",
+    ownerNotes: item.notes,
   });
 }
