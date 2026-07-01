@@ -49,7 +49,9 @@ export async function middleware(req: NextRequest) {
 // - api/aasa + .well-known: Apple's CDN must fetch unauthenticated.
 // - api/upload + api/data/import: large bodies; routes do their own checks.
 // - api/pursuits/run-search + api/mgmt: separate auth (cron secret / mgmt token).
+// - api/marketplace/ebay/account-deletion: eBay calls it unauthenticated; the
+//   route validates via the shared verification-token hash.
 // - _next/static, _next/image, favicon, uploads: static assets.
 export const config = {
-  matcher: ["/((?!login|register|api/auth|api/status|api/aasa|\\.well-known|api/pursuits/run-search|api/mgmt|api/upload|api/data/import|_next/static|_next/image|favicon\\.ico|uploads).*)"],
+  matcher: ["/((?!login|register|api/auth|api/status|api/aasa|\\.well-known|api/pursuits/run-search|api/mgmt|api/marketplace/ebay/account-deletion|api/upload|api/data/import|_next/static|_next/image|favicon\\.ico|uploads).*)"],
 };
