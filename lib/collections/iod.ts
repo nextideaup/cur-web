@@ -30,6 +30,7 @@ export const iodConfig: CollectionConfig = {
     { name: "package_length_in" },
     { name: "package_width_in" },
     { name: "package_height_in" },
+    { name: "listing_price" },
   ],
   conditionRequired: false,
   patchSetUpdatedAt: true,
