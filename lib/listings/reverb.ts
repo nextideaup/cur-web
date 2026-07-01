@@ -87,7 +87,7 @@ export const reverbChannel: ListingChannel = {
       title: input.title,
       description: input.description,
       condition: { uuid: condUuid },
-      photos: input.photoUrls,
+      photos: input.photoUrls.slice(0, 25), // Reverb max 25 photos per listing
       sku: input.sku,
       publish: false, // DRAFT — never goes live automatically
     };
