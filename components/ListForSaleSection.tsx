@@ -61,10 +61,13 @@ export default function ListForSaleSection({ module, itemId }: { module: string;
         body: JSON.stringify({ channel }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Listing failed");
+      if (!res.ok) throw new Error(data.error || `Listing failed (HTTP ${res.status})`);
       await loadListings();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
+      // Surface the recorded failure row (it carries the marketplace's detailed
+      // reason) so the message shows even when the response body was unhelpful.
+      await loadListings();
     } finally {
       setBusy(null);
     }
@@ -111,7 +114,7 @@ export default function ListForSaleSection({ module, itemId }: { module: string;
       {listings.length > 0 ? (
         <div className="space-y-1.5">
           {listings.map((l) => (
-            <div key={l.id} className="flex items-center gap-2 text-xs bg-surface-2 rounded-lg px-3 py-2">
+            <div key={l.id} className="flex items-start gap-2 text-xs bg-surface-2 rounded-lg px-3 py-2">
               <span className="font-medium text-text">{CHANNEL_LABEL[l.channel]}</span>
               <span
                 className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
@@ -129,7 +132,7 @@ export default function ListForSaleSection({ module, itemId }: { module: string;
                   View on {CHANNEL_LABEL[l.channel]} →
                 </a>
               ) : l.error ? (
-                <span className="text-red-400 truncate" title={l.error}>{l.error}</span>
+                <span className="text-red-400 break-words flex-1">{l.error}</span>
               ) : (
                 <span className="text-text-dim">draft created</span>
               )}

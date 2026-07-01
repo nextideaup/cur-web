@@ -87,11 +87,20 @@ export const ebayChannel: ListingChannel = {
 
     // Aspects: Brand/Model + each spec as a single-value aspect. eBay enforces
     // required aspects only at publish time, so a draft tolerates a partial set.
+    // eBay hard limits: aspect NAME ≤ 40 chars, VALUE ≤ 65 chars, and it rejects
+    // the whole inventory item if any value overflows — so clip both. Our specs
+    // can carry long values (e.g. a full electronics description), hence the cap.
+    const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
     const aspects: Record<string, string[]> = {};
-    if (input.brand) aspects["Brand"] = [input.brand];
-    if (input.model) aspects["Model"] = [input.model];
+    if (input.brand) aspects["Brand"] = [clip(input.brand, 65)];
+    if (input.model) aspects["Model"] = [clip(input.model, 65)];
     for (const s of input.specs) {
-      if (s.label?.trim() && s.value?.trim()) aspects[s.label.trim()] = [s.value.trim()];
+      const label = s.label?.trim();
+      const value = s.value?.trim();
+      if (!label || !value) continue;
+      // Cap total aspects to stay well under eBay's per-listing ceiling.
+      if (Object.keys(aspects).length >= 50) break;
+      aspects[clip(label, 40)] = [clip(value, 65)];
     }
 
     // Step 1 — inventory item (idempotent on SKU).
