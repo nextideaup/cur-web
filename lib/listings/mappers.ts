@@ -55,8 +55,11 @@ function buildDescription(item: RawListItem): string {
 export function buildListingInput(
   module: string,
   item: RawListItem,
-  opts: { price: number | null; photoUrls: string[]; currency: string },
+  opts: { price: number | null; photoUrls: string[]; currency: string; footer?: string | null },
 ): ListingInput {
+  // Description = intro/notes + specs, then the boilerplate footer (resolved by
+  // the caller: item override → user default → built-in).
+  const description = [buildDescription(item), opts.footer?.trim()].filter(Boolean).join("\n\n");
   return {
     module,
     itemId: item.id,
@@ -65,7 +68,7 @@ export function buildListingInput(
     model: item.model ?? null,
     year: item.year ?? null,
     condition: item.condition ?? null,
-    description: buildDescription(item),
+    description,
     price: opts.price,
     currency: opts.currency,
     photoUrls: opts.photoUrls,

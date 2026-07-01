@@ -107,6 +107,40 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
 
+  // Default listing footer (account-wide boilerplate).
+  const [footerText, setFooterText] = useState("");
+  const [footerBuiltin, setFooterBuiltin] = useState("");
+  const [footerSaving, setFooterSaving] = useState(false);
+
+  async function loadFooter() {
+    try {
+      const res = await fetch("/api/marketplace/listing-footer");
+      if (res.ok) {
+        const data = (await res.json()) as { footer: string | null; default: string };
+        setFooterBuiltin(data.default);
+        setFooterText(data.footer ?? data.default);
+      }
+    } catch { /* non-critical */ }
+  }
+
+  async function saveFooter() {
+    setFooterSaving(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/marketplace/listing-footer", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ footer: footerText }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setMsg("Default footer saved.");
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setFooterSaving(false);
+    }
+  }
+
   // Fetch the seller's eBay locations + policies to populate the dropdowns, and
   // auto-select any setting that has exactly one option and isn't set yet.
   async function loadEbayOptions(marketplaceId: string, announce = false) {
@@ -153,6 +187,7 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
         setEncOk(data.encryption_available);
         setEbayOAuthAvailable(data.ebay_oauth_available);
         setChannels(data.channels ?? []);
+        loadFooter();
         const eb = data.channels?.find((c) => c.channel === "ebay");
         if (eb?.meta) {
           setEbayMeta((m) => ({
@@ -405,6 +440,19 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
               </div>
             </>
           )}
+        </section>
+
+        {/* Default listing footer — boilerplate appended to every draft. */}
+        <section className="space-y-2 border-t border-border pt-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text">Default listing footer</h3>
+            <button onClick={() => setFooterText(footerBuiltin)} className="text-xs text-text-muted hover:text-text">Use suggested</button>
+          </div>
+          <p className="text-xs text-text-dim">Boilerplate appended to the end of every listing (inclusions, packing, shipping terms). You can override it per listing in an item’s Sell section.</p>
+          <textarea value={footerText} onChange={(e) => setFooterText(e.target.value)} rows={4} className={`${inputCls} resize-none`} />
+          <button onClick={saveFooter} disabled={footerSaving} className={btnCls}>
+            {footerSaving ? "Saving…" : "Save default footer"}
+          </button>
         </section>
       </div>
     </ModalShell>

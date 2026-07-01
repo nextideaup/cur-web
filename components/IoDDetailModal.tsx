@@ -376,7 +376,7 @@ export default function IoDDetailModal({
 
           {/* ── Sell Section ── */}
           <div className="mt-6 pt-6 border-t border-border px-6">
-            <ListForSaleSection module="iod" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} onIntroSaved={(v) => onItemUpdated?.({ ...item, listing_intro: v })} />
+            <ListForSaleSection module="iod" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} initialFooter={item.listing_footer} onIntroSaved={(v) => onItemUpdated?.({ ...item, listing_intro: v })} onFooterSaved={(v) => onItemUpdated?.({ ...item, listing_footer: v })} />
           </div>
 
           {/* Valuation section */}

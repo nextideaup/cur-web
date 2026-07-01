@@ -9,6 +9,7 @@ import { query, queryOne } from "@/lib/db";
 import type { CollectionConfig } from "@/lib/collections/types";
 import { getChannel } from "@/lib/listings";
 import { buildListingInput, type RawListItem } from "@/lib/listings/mappers";
+import { resolveFooter } from "@/lib/listings/footer";
 import { decryptToken } from "@/lib/listings/crypto";
 import { resolveEbayAccessToken } from "@/lib/listings/ebay-account";
 import { ListingConfigError, type ChannelMeta } from "@/lib/listings/types";
@@ -115,10 +116,21 @@ export function makeListingHandler(c: CollectionConfig) {
         .filter((p) => typeof p === "string" && p.startsWith("/uploads/"))
         .map((p) => `${base}/api${p}`);
 
+      // Effective listing footer: item override → user default → built-in.
+      const userDefault = await queryOne<{ listing_footer_default: string | null }>(
+        `SELECT listing_footer_default FROM users WHERE id = $1`,
+        [session.user.id],
+      );
+      const footer = resolveFooter(
+        (item as { listing_footer?: string | null }).listing_footer,
+        userDefault?.listing_footer_default,
+      );
+
       const input = buildListingInput(c.moduleSlug, item, {
         price,
         photoUrls,
         currency: meta.currency || "USD",
+        footer,
       });
 
       try {

@@ -27,6 +27,8 @@ export interface SpecFields {
   // AI-generated (and user-editable) opening paragraph for marketplace listings
   // (migration 022). Null until generated.
   listing_intro?: string | null;
+  // Per-listing footer override (migration 023). Null = use the seller's default.
+  listing_footer?: string | null;
 }
 
 export interface GuitarValuation {
