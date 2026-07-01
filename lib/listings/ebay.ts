@@ -23,7 +23,11 @@ function headers(token: string): Record<string, string> {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     Accept: "application/json",
+    // eBay's Inventory API validates BOTH language headers on write calls;
+    // sending only Content-Language yields HTTP 400 "Invalid value for header
+    // Accept-Language". Pin both to en-US.
     "Content-Language": "en-US",
+    "Accept-Language": "en-US",
   };
 }
 
