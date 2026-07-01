@@ -13,5 +13,6 @@ export function guitarSpecsPrompt(item: GuitarItem): string {
     template: guitarConfig.specTemplate,
     extraGuidance:
       "For amplifiers and pedals, adapt the fields (e.g. wattage, tubes/circuit, channels, controls) instead of guitar-specific wood/pickup fields.",
+    ownerNotes: item.notes,
   });
 }
