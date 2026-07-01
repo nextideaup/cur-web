@@ -400,7 +400,7 @@ export default function AutomobileDetailModal({
 
           {/* ── Sell Section ── */}
           <div className="px-6 pb-6 border-t border-border pt-5">
-            <ListForSaleSection module="automobiles" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} />
+            <ListForSaleSection module="automobiles" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} onIntroSaved={(v) => onItemUpdated?.({ ...item, listing_intro: v })} />
           </div>
 
           {/* Valuation section */}

@@ -101,7 +101,12 @@ export const reverbChannel: ListingChannel = {
       description: descriptionHtml(input.description),
       condition: { uuid: condUuid },
       photos: input.photoUrls.slice(0, 25), // Reverb max 25 photos per listing
-      sku: input.sku,
+      // Reverb SKUs must be unique per shop and stay reserved even after a
+      // listing is deleted — so a stable per-item SKU collides (HTTP 422) when
+      // you delete on Reverb and re-draft. Suffix it per draft to keep the item
+      // reference while guaranteeing uniqueness. (eBay keeps the stable SKU —
+      // there it's the idempotent inventory-item key.)
+      sku: `${input.sku}-${Date.now().toString(36)}`,
       publish: false, // DRAFT — never goes live automatically
     };
     if (input.year != null) body.year = String(input.year);

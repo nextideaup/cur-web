@@ -380,7 +380,7 @@ export default function ItemDetailModal({
 
           {/* ── Sell Section ── */}
           <div className="mt-6 pt-6 border-t border-border">
-            <ListForSaleSection module="guitars" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} />
+            <ListForSaleSection module="guitars" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} onIntroSaved={(v) => onItemUpdated?.({ ...item, listing_intro: v })} />
           </div>
 
           {/* ── Valuation Section ── */}
