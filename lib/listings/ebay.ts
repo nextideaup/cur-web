@@ -52,6 +52,28 @@ async function errorText(res: Response): Promise<string> {
   return text.slice(0, 300) || `HTTP ${res.status}`;
 }
 
+// Publish an unpublished offer → a LIVE eBay listing. This is where eBay
+// enforces all required item aspects/fields for the category, so it can fail
+// with specific "required aspect" errors even when the draft succeeded.
+export async function publishEbayOffer(
+  offerId: string,
+  token: string,
+  meta: ChannelMeta,
+): Promise<{ listingId: string | null; url: string | null }> {
+  const base = baseUrl(meta);
+  const res = await fetch(`${base}/sell/inventory/v1/offer/${encodeURIComponent(offerId)}/publish`, {
+    method: "POST",
+    headers: headers(token),
+  });
+  if (!res.ok) {
+    throw new Error(`eBay publish failed (HTTP ${res.status}): ${await errorText(res)}`);
+  }
+  const data = (await res.json()) as { listingId?: string };
+  const listingId = data.listingId ?? null;
+  const url = listingId && !meta.sandbox ? `https://www.ebay.com/itm/${listingId}` : null;
+  return { listingId, url };
+}
+
 export const ebayChannel: ListingChannel = {
   slug: "ebay",
   label: "eBay",

@@ -167,6 +167,27 @@ export default function ListForSaleSection({
     loadListings();
   }, [loadListings]);
 
+  async function publishListing(listingId: string) {
+    if (!confirm("Publish this listing LIVE on eBay?\n\nThis creates an active, publicly visible listing (fees apply). eBay will also enforce all required item details at this step.")) return;
+    setBusy(`publish-${listingId}`);
+    setError("");
+    try {
+      const res = await fetch(`/api/${module}/${itemId}/list/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Publish failed");
+      await loadListings();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Publish failed");
+      await loadListings();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function removeListing(listingId: string) {
     if (!confirm("Remove this listing from Vault 1?\n\nThis only clears the record here — it won't change anything on the marketplace.")) return;
     setError("");
@@ -333,7 +354,16 @@ export default function ListForSaleSection({
               ) : (
                 <span className="text-text-dim">draft created</span>
               )}
-              <span className="text-text-dim ml-auto shrink-0">{new Date(l.created_at).toLocaleDateString()}</span>
+              {l.channel === "ebay" && l.state === "draft" && (
+                <button
+                  onClick={() => publishListing(l.id)}
+                  disabled={busy === `publish-${l.id}`}
+                  className="shrink-0 ml-auto px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-900/30 text-emerald-300 border border-emerald-700/40 hover:bg-emerald-900/50 disabled:opacity-50"
+                >
+                  {busy === `publish-${l.id}` ? "Publishing…" : "Publish live"}
+                </button>
+              )}
+              <span className={`text-text-dim shrink-0 ${l.channel === "ebay" && l.state === "draft" ? "" : "ml-auto"}`}>{new Date(l.created_at).toLocaleDateString()}</span>
               <button
                 onClick={() => removeListing(l.id)}
                 aria-label="Remove listing record"
