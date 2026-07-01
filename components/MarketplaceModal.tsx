@@ -93,6 +93,17 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
   const [ebayOptions, setEbayOptions] = useState<EbayAccountOptions | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
 
+  // Inline "create inventory location" form (eBay has no self-serve UI for it).
+  const [locForm, setLocForm] = useState({
+    name: "Default",
+    addressLine1: "",
+    city: "",
+    stateOrProvince: "",
+    postalCode: "",
+    country: "US",
+  });
+  const [creatingLoc, setCreatingLoc] = useState(false);
+
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
 
@@ -198,6 +209,31 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
       setMsg(err instanceof Error ? err.message : "Save failed");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function createLocation() {
+    if (!locForm.postalCode.trim() || !locForm.country.trim()) {
+      setMsg("Enter at least a postal code and country to create a location.");
+      return;
+    }
+    setCreatingLoc(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/marketplace/ebay/location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(locForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not create location");
+      setMsg("Inventory location created.");
+      // Re-detect so the new location appears + auto-selects.
+      await loadEbayOptions(ebayMeta.marketplaceId);
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Could not create location");
+    } finally {
+      setCreatingLoc(false);
     }
   }
 
@@ -312,7 +348,6 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
                     className={inputCls}
                   />
                 </div>
-                <OptionSelect label="Inventory location" value={ebayMeta.merchantLocationKey} options={ebayOptions?.locations ?? []} onChange={(v) => setEbayMeta({ ...ebayMeta, merchantLocationKey: v })} emptyHint="No inventory location on your account." setupLink={ebayOptions?.setup_links?.locations} />
                 <OptionSelect label="Shipping (fulfillment) policy" value={ebayMeta.fulfillmentPolicyId} options={ebayOptions?.fulfillmentPolicies ?? []} onChange={(v) => setEbayMeta({ ...ebayMeta, fulfillmentPolicyId: v })} emptyHint="No shipping policy found." setupLink={ebayOptions?.setup_links?.policies} />
                 <OptionSelect label="Payment policy" value={ebayMeta.paymentPolicyId} options={ebayOptions?.paymentPolicies ?? []} onChange={(v) => setEbayMeta({ ...ebayMeta, paymentPolicyId: v })} emptyHint="No payment policy found." setupLink={ebayOptions?.setup_links?.policies} />
                 <OptionSelect label="Return policy" value={ebayMeta.returnPolicyId} options={ebayOptions?.returnPolicies ?? []} onChange={(v) => setEbayMeta({ ...ebayMeta, returnPolicyId: v })} emptyHint="No return policy found." setupLink={ebayOptions?.setup_links?.policies} />
@@ -321,6 +356,38 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
                   <input value={ebayMeta.categoryId} onChange={(e) => setEbayMeta({ ...ebayMeta, categoryId: e.target.value })} placeholder="auto-detected per item" className={inputCls} />
                 </div>
               </div>
+
+              {/* Inventory location — dropdown when the account has one, else an
+                  in-app create form (eBay has no self-serve page for this). */}
+              <div>
+                <label className="block text-xs text-text-muted mb-1">Inventory location</label>
+                {(ebayOptions?.locations?.length ?? 0) > 0 ? (
+                  <select value={ebayMeta.merchantLocationKey} onChange={(e) => setEbayMeta({ ...ebayMeta, merchantLocationKey: e.target.value })} className={inputCls}>
+                    <option value="">Select…</option>
+                    {ebayOptions!.locations.map((o) => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="space-y-2 bg-surface-2 rounded-xl p-3">
+                    <p className="text-xs text-text-dim">
+                      No inventory location on your account — eBay needs one to draft an offer, and there’s no eBay page to add it (it’s API-only). Create one here:
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input value={locForm.name} onChange={(e) => setLocForm({ ...locForm, name: e.target.value })} placeholder="Name (e.g. Default)" className={inputCls} />
+                      <input value={locForm.country} onChange={(e) => setLocForm({ ...locForm, country: e.target.value })} placeholder="Country (US)" className={inputCls} />
+                      <input value={locForm.postalCode} onChange={(e) => setLocForm({ ...locForm, postalCode: e.target.value })} placeholder="Postal code *" className={inputCls} />
+                      <input value={locForm.city} onChange={(e) => setLocForm({ ...locForm, city: e.target.value })} placeholder="City" className={inputCls} />
+                      <input value={locForm.stateOrProvince} onChange={(e) => setLocForm({ ...locForm, stateOrProvince: e.target.value })} placeholder="State/Province" className={inputCls} />
+                      <input value={locForm.addressLine1} onChange={(e) => setLocForm({ ...locForm, addressLine1: e.target.value })} placeholder="Address line 1 (optional)" className={inputCls} />
+                    </div>
+                    <button onClick={createLocation} disabled={creatingLoc} className={btnCls}>
+                      {creatingLoc ? "Creating…" : "Create location"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center gap-2">
                 <button onClick={saveEbayMeta} disabled={busy === "ebay"} className={btnCls}>
                   {busy === "ebay" ? "Saving…" : "Save eBay settings"}

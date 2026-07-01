@@ -92,6 +92,51 @@ async function fetchPolicies(
   return { options, forbidden: false };
 }
 
+export interface NewLocationInput {
+  name: string;
+  addressLine1?: string;
+  city?: string;
+  stateOrProvince?: string;
+  postalCode: string;
+  country: string; // 2-letter code, e.g. "US"
+}
+
+// Create a default inventory location. eBay has no self-serve UI for this — it
+// only exists via the Inventory API — so this backs the in-app "Create
+// location" form. Minimally needs country + postalCode; city/state/line1 are
+// sent when provided. eBay returns 204 on success.
+export async function createEbayLocation(token: string, key: string, input: NewLocationInput): Promise<void> {
+  const address: Record<string, string> = { country: input.country, postalCode: input.postalCode };
+  if (input.addressLine1) address.addressLine1 = input.addressLine1;
+  if (input.city) address.city = input.city;
+  if (input.stateOrProvince) address.stateOrProvince = input.stateOrProvince;
+
+  const res = await fetch(`${apiHost()}/sell/inventory/v1/location/${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Content-Language": "en-US",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      location: { address },
+      name: input.name,
+      locationTypes: ["WAREHOUSE"],
+      merchantLocationStatus: "ENABLED",
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = text.slice(0, 300);
+    try {
+      const j = JSON.parse(text) as { errors?: { message?: string; longMessage?: string }[] };
+      msg = j.errors?.[0]?.longMessage || j.errors?.[0]?.message || msg;
+    } catch { /* non-JSON */ }
+    throw new Error(`eBay location create failed (HTTP ${res.status}): ${msg}`);
+  }
+}
+
 export async function fetchEbayAccountOptions(token: string, marketplaceId: string): Promise<EbayAccountOptions> {
   // Inventory locations (sell.inventory scope, always granted).
   let locations: EbayOption[] = [];
