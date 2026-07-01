@@ -280,6 +280,12 @@ export function makePublishHandler(c: CollectionConfig) {
         return NextResponse.json({ state: "published", external_url: url });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        // Record the reason on the row so it shows in the Sell section (publish
+        // is where eBay enforces required item specifics — the message names them).
+        await query(
+          `UPDATE marketplace_listings SET error = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`,
+          [message, row.id, session.user.id],
+        );
         console.error(`[listing] eBay publish failed for ${c.label} id=${id}:`, message);
         return NextResponse.json({ error: `eBay: ${message}` }, { status: 502 });
       }
