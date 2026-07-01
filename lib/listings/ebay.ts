@@ -42,6 +42,20 @@ const CONDITION_ENUM: Record<Condition, string> = {
   Poor: "FOR_PARTS_OR_NOT_WORKING",
 };
 
+// eBay renders listing descriptions as HTML, so the plain "\n" line breaks in
+// our assembled description (blank line after the intro, one line per spec,
+// blank line before the footer) collapse into a run-on block. Convert them to
+// <br> — same treatment as the Reverb adapter (descriptionHtml in reverb.ts).
+// Escape HTML metacharacters first so a spec value containing "&"/"<"/">"
+// renders literally instead of breaking the markup.
+function descriptionHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>\n");
+}
+
 async function errorText(res: Response): Promise<string> {
   const text = await res.text();
   try {
@@ -157,7 +171,7 @@ export const ebayChannel: ListingChannel = {
         ...(Object.keys(pkg).length > 0 ? { packageWeightAndSize: pkg } : {}),
         product: {
           title: input.title.slice(0, 80), // eBay title cap
-          description: input.description,
+          description: descriptionHtml(input.description),
           aspects,
           imageUrls: input.photoUrls.slice(0, 24), // eBay max 24 images
         },
@@ -174,7 +188,7 @@ export const ebayChannel: ListingChannel = {
       format: "FIXED_PRICE",
       availableQuantity: 1,
       categoryId,
-      listingDescription: input.description,
+      listingDescription: descriptionHtml(input.description),
       listingPolicies: {
         fulfillmentPolicyId: meta.fulfillmentPolicyId,
         paymentPolicyId: meta.paymentPolicyId,
