@@ -25,6 +25,7 @@ export const guitarConfig: CollectionConfig = {
     { name: "insure", type: "boolean" },
     { name: "specs", type: "jsonb" },
     { name: "listing_intro", trim: true },
+    { name: "listing_footer", trim: true },
   ],
   conditionRequired: true,
   patchSetUpdatedAt: false,

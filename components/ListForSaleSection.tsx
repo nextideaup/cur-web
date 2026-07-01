@@ -35,13 +35,17 @@ export default function ListForSaleSection({
   itemId,
   condition,
   initialIntro,
+  initialFooter,
   onIntroSaved,
+  onFooterSaved,
 }: {
   module: string;
   itemId: string;
   condition?: string | null;
   initialIntro?: string | null;
+  initialFooter?: string | null;
   onIntroSaved?: (intro: string) => void;
+  onFooterSaved?: (footer: string) => void;
 }) {
   const [channels, setChannels] = useState<ChannelStatus[]>([]);
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
@@ -55,6 +59,36 @@ export default function ListForSaleSection({
   const [introDetails, setIntroDetails] = useState("");
   const [introBusy, setIntroBusy] = useState<null | "generate" | "save">(null);
   const [introMsg, setIntroMsg] = useState("");
+
+  // Per-listing footer override (blank = use the account default, shown as the
+  // placeholder once fetched).
+  const [footer, setFooter] = useState(initialFooter ?? "");
+  const [footerDefault, setFooterDefault] = useState("");
+  const [footerBusy, setFooterBusy] = useState(false);
+  const [footerMsg, setFooterMsg] = useState("");
+
+  async function saveFooter() {
+    setFooterBusy(true);
+    setError("");
+    setFooterMsg("");
+    try {
+      const res = await fetch(`/api/${module}/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listing_footer: footer }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not save footer");
+      }
+      setFooterMsg(footer.trim() ? "Saved" : "Cleared — using your default");
+      onFooterSaved?.(footer);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save footer");
+    } finally {
+      setFooterBusy(false);
+    }
+  }
 
   async function generateIntro() {
     setIntroBusy("generate");
@@ -118,6 +152,15 @@ export default function ListForSaleSection({
         if (res.ok) {
           const data = (await res.json()) as { channels: ChannelStatus[] };
           setChannels(data.channels ?? []);
+        }
+      } catch { /* non-critical */ }
+    })();
+    (async () => {
+      try {
+        const res = await fetch("/api/marketplace/listing-footer");
+        if (res.ok) {
+          const data = (await res.json()) as { footer: string | null; default: string };
+          setFooterDefault(data.footer ?? data.default); // the effective default
         }
       } catch { /* non-critical */ }
     })();
@@ -212,6 +255,27 @@ export default function ListForSaleSection({
             No intro yet. Generate a natural opening paragraph — it’s stored here and used for both Reverb and eBay drafts.
           </p>
         )}
+      </div>
+
+      {/* Listing footer — per-listing override; blank uses the account default. */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-1.5">
+          <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide">Listing footer</h4>
+          {footerMsg && <span className="text-xs text-emerald-400">✓ {footerMsg}</span>}
+        </div>
+        <textarea
+          value={footer}
+          onChange={(e) => { setFooter(e.target.value); if (footerMsg) setFooterMsg(""); }}
+          rows={3}
+          placeholder={footerDefault ? `Using your default:\n${footerDefault}` : "Boilerplate appended to the listing…"}
+          className={`${inputCls} resize-none`}
+        />
+        <div className="flex items-center gap-2 mt-1">
+          <button onClick={saveFooter} disabled={footerBusy} className={btnCls}>
+            {footerBusy ? "Saving…" : "Save footer"}
+          </button>
+          <span className="text-[11px] text-text-dim">Leave blank to use your default (Marketplace settings).</span>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
