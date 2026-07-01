@@ -29,6 +29,12 @@ export interface SpecFields {
   listing_intro?: string | null;
   // Per-listing footer override (migration 023). Null = use the seller's default.
   listing_footer?: string | null;
+  // Shipping package weight + dimensions (migration 024). Used to populate eBay
+  // listings (required to publish). NUMERIC columns come back from pg as strings.
+  package_weight_lb?: number | string | null;
+  package_length_in?: number | string | null;
+  package_width_in?: number | string | null;
+  package_height_in?: number | string | null;
 }
 
 export interface GuitarValuation {

@@ -134,6 +134,19 @@ export const ebayChannel: ListingChannel = {
       aspects[clip(label, 40)] = [clip(value, 65)];
     }
 
+    // Shipping package — eBay requires a weight to PUBLISH (drafts tolerate its
+    // absence). Include weight/dimensions from the item when present.
+    const pkg: Record<string, unknown> = {};
+    if (input.packageWeightLb) pkg.weight = { value: input.packageWeightLb, unit: "POUND" };
+    if (input.packageLengthIn && input.packageWidthIn && input.packageHeightIn) {
+      pkg.dimensions = {
+        length: input.packageLengthIn,
+        width: input.packageWidthIn,
+        height: input.packageHeightIn,
+        unit: "INCH",
+      };
+    }
+
     // Step 1 — inventory item (idempotent on SKU).
     const invRes = await fetch(`${base}/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
       method: "PUT",
@@ -141,6 +154,7 @@ export const ebayChannel: ListingChannel = {
       body: JSON.stringify({
         availability: { shipToLocationAvailability: { quantity: 1 } },
         condition: CONDITION_ENUM[input.condition],
+        ...(Object.keys(pkg).length > 0 ? { packageWeightAndSize: pkg } : {}),
         product: {
           title: input.title.slice(0, 80), // eBay title cap
           description: input.description,

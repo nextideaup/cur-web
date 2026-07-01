@@ -21,6 +21,17 @@ export interface RawListItem {
   notes?: string | null;
   specs?: SpecEntry[] | null;
   listing_intro?: string | null;
+  package_weight_lb?: number | string | null;
+  package_length_in?: number | string | null;
+  package_width_in?: number | string | null;
+  package_height_in?: number | string | null;
+}
+
+// NUMERIC columns arrive from pg as strings — coerce to a positive number or null.
+function num(v: number | string | null | undefined): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : parseFloat(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function buildTitle(item: RawListItem): string {
@@ -76,5 +87,9 @@ export function buildListingInput(
     // Stable per-item SKU so re-listing updates the same marketplace record
     // rather than spawning duplicates.
     sku: `vault1-${module}-${item.id}`,
+    packageWeightLb: num(item.package_weight_lb),
+    packageLengthIn: num(item.package_length_in),
+    packageWidthIn: num(item.package_width_in),
+    packageHeightIn: num(item.package_height_in),
   };
 }
