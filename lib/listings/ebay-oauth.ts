@@ -14,7 +14,14 @@
 // token exchange is the **RuName** (the eBay "Redirect URL name"), NOT the raw
 // https callback URL. eBay maps the RuName to the callback you registered.
 
-const SCOPES = ["https://api.ebay.com/oauth/api_scope/sell.inventory"];
+// sell.inventory → create offers + read inventory locations.
+// sell.account.readonly → read the seller's business policies (fulfillment /
+// payment / return) so we can auto-fill them instead of hand-typing IDs.
+// NOTE: adding a scope means existing connections must reconnect to grant it.
+const SCOPES = [
+  "https://api.ebay.com/oauth/api_scope/sell.inventory",
+  "https://api.ebay.com/oauth/api_scope/sell.account.readonly",
+];
 
 export function ebaySandbox(): boolean {
   return process.env.EBAY_SANDBOX === "true" || process.env.EBAY_SANDBOX === "1";
@@ -93,4 +100,81 @@ export function refreshAccessToken(refreshToken: string): Promise<EbayTokenRespo
       scope: SCOPES.join(" "),
     }),
   );
+}
+
+// ── Application token (client-credentials) + Taxonomy ─────────────────────────
+//
+// The Taxonomy API (category suggestions) is app-level data, not user-specific,
+// so we use an APPLICATION access token (client_credentials grant) rather than
+// burdening the seller's consent with a taxonomy scope. Cached on globalThis
+// until shortly before expiry.
+
+const APP_SCOPE = "https://api.ebay.com/oauth/api_scope";
+const g = globalThis as unknown as {
+  __ebayAppToken?: { token: string; expiresAt: number; sandbox: boolean };
+  __ebayCategoryTree?: Record<string, string>; // marketplaceId → categoryTreeId
+};
+
+async function getApplicationToken(): Promise<string> {
+  const sandbox = ebaySandbox();
+  const cached = g.__ebayAppToken;
+  if (cached && cached.sandbox === sandbox && Date.now() < cached.expiresAt - 60_000) {
+    return cached.token;
+  }
+  const resp = await tokenRequest(
+    new URLSearchParams({ grant_type: "client_credentials", scope: APP_SCOPE }),
+  );
+  g.__ebayAppToken = {
+    token: resp.access_token,
+    expiresAt: Date.now() + resp.expires_in * 1000,
+    sandbox,
+  };
+  return resp.access_token;
+}
+
+async function categoryTreeId(marketplaceId: string, appToken: string): Promise<string> {
+  g.__ebayCategoryTree ??= {};
+  if (g.__ebayCategoryTree[marketplaceId]) return g.__ebayCategoryTree[marketplaceId];
+  const res = await fetch(
+    `${apiHost()}/commerce/taxonomy/v1/get_default_category_tree_id?marketplace_id=${encodeURIComponent(marketplaceId)}`,
+    { headers: { Authorization: `Bearer ${appToken}` } },
+  );
+  if (!res.ok) throw new Error(`eBay taxonomy tree lookup failed (HTTP ${res.status})`);
+  const data = (await res.json()) as { categoryTreeId?: string };
+  if (!data.categoryTreeId) throw new Error("eBay taxonomy returned no categoryTreeId");
+  g.__ebayCategoryTree[marketplaceId] = data.categoryTreeId;
+  return data.categoryTreeId;
+}
+
+export interface CategorySuggestion {
+  categoryId: string;
+  categoryName: string;
+}
+
+// Best-effort leaf-category suggestion for a listing title. Returns null on any
+// failure so the caller can fall back to a manual categoryId.
+export async function getCategorySuggestion(
+  title: string,
+  marketplaceId = "EBAY_US",
+): Promise<CategorySuggestion | null> {
+  try {
+    const appToken = await getApplicationToken();
+    const treeId = await categoryTreeId(marketplaceId, appToken);
+    const res = await fetch(
+      `${apiHost()}/commerce/taxonomy/v1/category_tree/${treeId}/get_category_suggestions?q=${encodeURIComponent(title)}`,
+      { headers: { Authorization: `Bearer ${appToken}` } },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      categorySuggestions?: { category?: { categoryId?: string; categoryName?: string } }[];
+    };
+    const top = data.categorySuggestions?.[0]?.category;
+    if (top?.categoryId) {
+      return { categoryId: top.categoryId, categoryName: top.categoryName ?? top.categoryId };
+    }
+    return null;
+  } catch (e) {
+    console.warn("[ebay] category suggestion failed:", e);
+    return null;
+  }
 }

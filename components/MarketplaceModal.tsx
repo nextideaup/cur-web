@@ -12,10 +12,54 @@ interface ChannelState {
   updated_at: string | null;
 }
 
+interface EbayOption { id: string; name: string; }
+interface EbayAccountOptions {
+  locations: EbayOption[];
+  fulfillmentPolicies: EbayOption[];
+  paymentPolicies: EbayOption[];
+  returnPolicies: EbayOption[];
+  needs_reauth?: boolean;
+  setup_links?: { policies: string; locations: string };
+}
+
 const inputCls =
   "w-full bg-surface-2 border border-border text-text rounded-xl px-3 py-2 text-sm focus:border-accent focus:ring-1 focus:ring-accent outline-none";
 const btnCls =
   "px-3 py-1.5 rounded-lg text-xs font-medium bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 disabled:opacity-50";
+
+// A labelled dropdown for an eBay account setting. When the account has no
+// options of this type, shows guidance + a deep link to set it up on eBay.
+function OptionSelect({
+  label, value, options, onChange, emptyHint, setupLink,
+}: {
+  label: string;
+  value: string;
+  options: EbayOption[];
+  onChange: (v: string) => void;
+  emptyHint: string;
+  setupLink?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-xs text-text-muted mb-1">{label}</label>
+      {options.length === 0 ? (
+        <p className="text-xs text-text-dim">
+          {emptyHint}{" "}
+          {setupLink && (
+            <a href={setupLink} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Set up on eBay ↗</a>
+          )}
+        </p>
+      ) : (
+        <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
+          <option value="">Select…</option>
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>{o.name}</option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
 
 // Messages for the ?ebay=… status the OAuth callback redirects back with.
 const EBAY_STATUS: Record<string, string> = {
@@ -46,8 +90,33 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
     categoryId: "",
   });
 
+  const [ebayOptions, setEbayOptions] = useState<EbayAccountOptions | null>(null);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+
+  // Fetch the seller's eBay locations + policies to populate the dropdowns, and
+  // auto-select any setting that has exactly one option and isn't set yet.
+  async function loadEbayOptions(marketplaceId: string) {
+    setOptionsLoading(true);
+    try {
+      const res = await fetch(`/api/marketplace/ebay/account-options?marketplaceId=${encodeURIComponent(marketplaceId || "EBAY_US")}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as EbayAccountOptions;
+      setEbayOptions(data);
+      const only = (opts: EbayOption[]) => (opts?.length === 1 ? opts[0].id : "");
+      setEbayMeta((m) => ({
+        ...m,
+        merchantLocationKey: m.merchantLocationKey || only(data.locations),
+        fulfillmentPolicyId: m.fulfillmentPolicyId || only(data.fulfillmentPolicies),
+        paymentPolicyId: m.paymentPolicyId || only(data.paymentPolicies),
+        returnPolicyId: m.returnPolicyId || only(data.returnPolicies),
+      }));
+    } finally {
+      setOptionsLoading(false);
+    }
+  }
 
   async function load() {
     try {
@@ -74,6 +143,7 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
         }
         const rv = data.channels?.find((c) => c.channel === "reverb");
         if (rv?.meta) setReverbSandbox(!!rv.meta.sandbox);
+        if (eb?.connected) loadEbayOptions((eb.meta.marketplaceId as string) || "EBAY_US");
       }
     } finally {
       setLoading(false);
@@ -210,18 +280,43 @@ export default function MarketplaceModal({ onClose }: { onClose: () => void }) {
             </>
           ) : (
             <>
-              <p className="text-xs text-text-dim">Listing settings — required for eBay to draft an offer (from the eBay Account &amp; Inventory-Location APIs):</p>
-              <div className="grid grid-cols-2 gap-2">
-                <input value={ebayMeta.marketplaceId} onChange={(e) => setEbayMeta({ ...ebayMeta, marketplaceId: e.target.value })} placeholder="marketplaceId (EBAY_US)" className={inputCls} />
-                <input value={ebayMeta.categoryId} onChange={(e) => setEbayMeta({ ...ebayMeta, categoryId: e.target.value })} placeholder="categoryId (leaf)" className={inputCls} />
-                <input value={ebayMeta.merchantLocationKey} onChange={(e) => setEbayMeta({ ...ebayMeta, merchantLocationKey: e.target.value })} placeholder="merchantLocationKey" className={inputCls} />
-                <input value={ebayMeta.fulfillmentPolicyId} onChange={(e) => setEbayMeta({ ...ebayMeta, fulfillmentPolicyId: e.target.value })} placeholder="fulfillmentPolicyId" className={inputCls} />
-                <input value={ebayMeta.paymentPolicyId} onChange={(e) => setEbayMeta({ ...ebayMeta, paymentPolicyId: e.target.value })} placeholder="paymentPolicyId" className={inputCls} />
-                <input value={ebayMeta.returnPolicyId} onChange={(e) => setEbayMeta({ ...ebayMeta, returnPolicyId: e.target.value })} placeholder="returnPolicyId" className={inputCls} />
+              {ebayOptions?.needs_reauth && (
+                <div className="text-xs text-amber-300 bg-amber-900/20 border border-amber-700/40 rounded-lg px-3 py-2">
+                  Reconnect eBay to grant permission to read your business policies.{" "}
+                  <a href="/api/marketplace/ebay/connect" className="text-accent hover:underline">Reconnect ↗</a>
+                </div>
+              )}
+              <p className="text-xs text-text-dim">
+                Listing settings for eBay drafts. Category is detected automatically per item — the field below is an optional override.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-text-muted mb-1">Marketplace</label>
+                  <input
+                    value={ebayMeta.marketplaceId}
+                    onChange={(e) => setEbayMeta({ ...ebayMeta, marketplaceId: e.target.value })}
+                    onBlur={() => loadEbayOptions(ebayMeta.marketplaceId)}
+                    placeholder="EBAY_US"
+                    className={inputCls}
+                  />
+                </div>
+                <OptionSelect label="Inventory location" value={ebayMeta.merchantLocationKey} options={ebayOptions?.locations ?? []} onChange={(v) => setEbayMeta({ ...ebayMeta, merchantLocationKey: v })} emptyHint="No inventory location on your account." setupLink={ebayOptions?.setup_links?.locations} />
+                <OptionSelect label="Shipping (fulfillment) policy" value={ebayMeta.fulfillmentPolicyId} options={ebayOptions?.fulfillmentPolicies ?? []} onChange={(v) => setEbayMeta({ ...ebayMeta, fulfillmentPolicyId: v })} emptyHint="No shipping policy found." setupLink={ebayOptions?.setup_links?.policies} />
+                <OptionSelect label="Payment policy" value={ebayMeta.paymentPolicyId} options={ebayOptions?.paymentPolicies ?? []} onChange={(v) => setEbayMeta({ ...ebayMeta, paymentPolicyId: v })} emptyHint="No payment policy found." setupLink={ebayOptions?.setup_links?.policies} />
+                <OptionSelect label="Return policy" value={ebayMeta.returnPolicyId} options={ebayOptions?.returnPolicies ?? []} onChange={(v) => setEbayMeta({ ...ebayMeta, returnPolicyId: v })} emptyHint="No return policy found." setupLink={ebayOptions?.setup_links?.policies} />
+                <div>
+                  <label className="block text-xs text-text-muted mb-1">Category override (optional)</label>
+                  <input value={ebayMeta.categoryId} onChange={(e) => setEbayMeta({ ...ebayMeta, categoryId: e.target.value })} placeholder="auto-detected per item" className={inputCls} />
+                </div>
               </div>
-              <button onClick={saveEbayMeta} disabled={busy === "ebay"} className={btnCls}>
-                {busy === "ebay" ? "Saving…" : "Save eBay settings"}
-              </button>
+              <div className="flex items-center gap-3">
+                <button onClick={saveEbayMeta} disabled={busy === "ebay"} className={btnCls}>
+                  {busy === "ebay" ? "Saving…" : "Save eBay settings"}
+                </button>
+                <button onClick={() => loadEbayOptions(ebayMeta.marketplaceId)} disabled={optionsLoading} className="text-xs text-text-muted hover:text-text disabled:opacity-50">
+                  {optionsLoading ? "Refreshing…" : "Refresh from eBay"}
+                </button>
+              </div>
             </>
           )}
         </section>
