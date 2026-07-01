@@ -9,8 +9,8 @@ import { query, queryOne } from "@/lib/db";
 import type { CollectionConfig } from "@/lib/collections/types";
 import { getChannel } from "@/lib/listings";
 import { buildListingInput, type RawListItem } from "@/lib/listings/mappers";
-import { decryptToken, encryptToken } from "@/lib/listings/crypto";
-import { refreshAccessToken } from "@/lib/listings/ebay-oauth";
+import { decryptToken } from "@/lib/listings/crypto";
+import { resolveEbayAccessToken } from "@/lib/listings/ebay-account";
 import { ListingConfigError, type ChannelMeta } from "@/lib/listings/types";
 
 function appBaseUrl(): string {
@@ -62,40 +62,30 @@ export function makeListingHandler(c: CollectionConfig) {
           { status: 400 },
         );
       }
-      let token: string;
-      try {
-        token = decryptToken(cred.token_encrypted);
-      } catch {
-        return NextResponse.json(
-          { error: `Stored ${channel.label} token could not be read. Re-connect the account.`, code: "bad_credential" },
-          { status: 400 },
-        );
-      }
       const meta = (cred.meta ?? {}) as ChannelMeta;
 
-      // eBay OAuth: the access token is short-lived (~2h). When it's expired (or
-      // within 60s of it), mint a fresh one from the stored refresh token and
-      // persist it. Paste-token credentials have no refresh token and are used
-      // as-is. A failed refresh means the seller must re-connect.
-      if (channel.slug === "ebay" && cred.refresh_token_encrypted) {
-        const expiresAt = cred.token_expires_at ? new Date(cred.token_expires_at).getTime() : 0;
-        if (Date.now() > expiresAt - 60_000) {
-          try {
-            const refreshed = await refreshAccessToken(decryptToken(cred.refresh_token_encrypted));
-            token = refreshed.access_token;
-            await query(
-              `UPDATE marketplace_credentials
-                  SET token_encrypted = $1, token_expires_at = $2, updated_at = NOW()
-                WHERE user_id = $3 AND channel = 'ebay'`,
-              [encryptToken(token), new Date(Date.now() + refreshed.expires_in * 1000), session.user.id],
-            );
-          } catch (e) {
-            console.error(`[listing] eBay token refresh failed for user=${session.user.id}:`, e);
-            return NextResponse.json(
-              { error: "Your eBay connection expired. Reconnect eBay in Marketplace settings.", code: "reauth" },
-              { status: 400 },
-            );
-          }
+      // Resolve a usable token. eBay goes through resolveEbayAccessToken, which
+      // refreshes the short-lived (~2h) access token from the stored refresh
+      // token and persists it; a failed refresh means the seller must reconnect.
+      // Reverb uses its stored token as-is.
+      let token: string;
+      if (channel.slug === "ebay") {
+        const resolved = await resolveEbayAccessToken(session.user.id);
+        if (resolved.error || !resolved.token) {
+          return NextResponse.json(
+            { error: "Your eBay connection expired. Reconnect eBay in Marketplace settings.", code: "reauth" },
+            { status: 400 },
+          );
+        }
+        token = resolved.token;
+      } else {
+        try {
+          token = decryptToken(cred.token_encrypted);
+        } catch {
+          return NextResponse.json(
+            { error: `Stored ${channel.label} token could not be read. Re-connect the account.`, code: "bad_credential" },
+            { status: 400 },
+          );
         }
       }
 

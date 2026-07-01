@@ -12,6 +12,7 @@
 
 import type { Condition } from "@/lib/types";
 import { ListingConfigError, type ChannelMeta, type ListingChannel, type ListingInput, type ListingResult } from "./types";
+import { getCategorySuggestion } from "./ebay-oauth";
 
 function baseUrl(meta: ChannelMeta): string {
   return meta.sandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
@@ -56,17 +57,25 @@ export const ebayChannel: ListingChannel = {
     const marketplaceId = meta.marketplaceId || "EBAY_US";
     const currency = meta.currency || input.currency || "USD";
 
-    // An offer can't be built without these. Collect all missing ones up front
-    // so the user fixes the config in a single pass.
+    // Leaf category is per-item: use a configured override if present, else
+    // auto-detect it from the title via eBay's Taxonomy API.
+    let categoryId = meta.categoryId;
+    if (!categoryId) {
+      const suggestion = await getCategorySuggestion(input.title, marketplaceId);
+      categoryId = suggestion?.categoryId;
+    }
+
+    // The account-level identifiers (location + policies) still come from the
+    // seller's saved settings. Collect any missing ones up front.
     const missing: string[] = [];
-    if (!meta.categoryId) missing.push("categoryId (leaf category)");
+    if (!categoryId) missing.push("category (couldn't auto-detect one — set a categoryId in eBay settings)");
     if (!meta.merchantLocationKey) missing.push("merchantLocationKey");
     if (!meta.fulfillmentPolicyId) missing.push("fulfillmentPolicyId");
     if (!meta.paymentPolicyId) missing.push("paymentPolicyId");
     if (!meta.returnPolicyId) missing.push("returnPolicyId");
     if (missing.length > 0) {
       throw new ListingConfigError(
-        `eBay needs more account config before it can draft a listing. Missing: ${missing.join(", ")}. Add these in the eBay connection settings (from the eBay Account & Inventory Location APIs).`,
+        `eBay needs more setup before it can draft a listing. Missing: ${missing.join(", ")}. Fill these in the eBay connection settings.`,
       );
     }
     if (!input.condition) {
@@ -110,7 +119,7 @@ export const ebayChannel: ListingChannel = {
       marketplaceId,
       format: "FIXED_PRICE",
       availableQuantity: 1,
-      categoryId: meta.categoryId,
+      categoryId,
       listingDescription: input.description,
       listingPolicies: {
         fulfillmentPolicyId: meta.fulfillmentPolicyId,
