@@ -9,15 +9,90 @@ import { query, queryOne } from "@/lib/db";
 import type { CollectionConfig } from "@/lib/collections/types";
 import { getChannel } from "@/lib/listings";
 import { publishEbayOffer } from "@/lib/listings/ebay";
-import { ebaySandbox } from "@/lib/listings/ebay-oauth";
 import { buildListingInput, type RawListItem } from "@/lib/listings/mappers";
 import { resolveFooter } from "@/lib/listings/footer";
 import { decryptToken } from "@/lib/listings/crypto";
 import { resolveEbayAccessToken } from "@/lib/listings/ebay-account";
-import { ListingConfigError, type ChannelMeta } from "@/lib/listings/types";
+import { ListingConfigError, type ChannelMeta, type ListingChannel, type ListingInput } from "@/lib/listings/types";
 
 function appBaseUrl(): string {
   return process.env.NEXTAUTH_URL || `http://localhost:${process.env.PORT || 3000}`;
+}
+
+type Assembled =
+  | { ok: true; channel: ListingChannel; input: ListingInput; token: string; meta: ChannelMeta }
+  | { ok: false; response: NextResponse };
+
+// Gather everything needed to (re)create a draft for one item on one channel:
+// resolve credentials/token, price, photos, footer, and build the ListingInput.
+// Shared by the draft POST and the publish re-sync so both always use the
+// latest item data (weight, intro, footer, price, specs).
+async function assembleListing(c: CollectionConfig, userId: string, id: string, channelSlug: string): Promise<Assembled> {
+  const channel = getChannel(channelSlug);
+  if (!channel) {
+    return { ok: false, response: NextResponse.json({ error: "channel must be 'reverb' or 'ebay'" }, { status: 400 }) };
+  }
+
+  const item = await queryOne<RawListItem & { purchase_price?: number | null }>(
+    `SELECT * FROM ${c.table} WHERE id = $1 AND user_id = $2`,
+    [id, userId],
+  );
+  if (!item) return { ok: false, response: NextResponse.json({ error: "Item not found" }, { status: 404 }) };
+
+  const cred = await queryOne<{ token_encrypted: string; meta: ChannelMeta }>(
+    `SELECT token_encrypted, meta FROM marketplace_credentials WHERE user_id = $1 AND channel = $2`,
+    [userId, channel.slug],
+  );
+  if (!cred) {
+    return { ok: false, response: NextResponse.json({ error: `Connect your ${channel.label} account first (Marketplace settings).`, code: "not_connected" }, { status: 400 }) };
+  }
+  const meta = (cred.meta ?? {}) as ChannelMeta;
+
+  let token: string;
+  if (channel.slug === "ebay") {
+    const resolved = await resolveEbayAccessToken(userId);
+    if (resolved.error || !resolved.token) {
+      return { ok: false, response: NextResponse.json({ error: "Your eBay connection expired. Reconnect eBay in Marketplace settings.", code: "reauth" }, { status: 400 }) };
+    }
+    token = resolved.token;
+  } else {
+    try {
+      token = decryptToken(cred.token_encrypted);
+    } catch {
+      return { ok: false, response: NextResponse.json({ error: `Stored ${channel.label} token could not be read. Re-connect the account.`, code: "bad_credential" }, { status: 400 }) };
+    }
+  }
+
+  const latest = await queryOne<{ price: string | number }>(
+    `SELECT price FROM ${c.valuationsTable}
+      WHERE ${c.valuationFkColumn} = $1
+      ORDER BY (valuation_type = 'ai') DESC, created_at DESC LIMIT 1`,
+    [id],
+  );
+  const price =
+    latest?.price != null ? Number(latest.price)
+    : item.purchase_price != null ? Number(item.purchase_price)
+    : null;
+
+  const imgs = await query<{ path: string }>(
+    `SELECT path FROM ${c.imagesTable} WHERE ${c.imageFkColumn} = $1
+      ORDER BY sort_order ASC, is_primary DESC, created_at ASC`,
+    [id],
+  );
+  const base = appBaseUrl();
+  const photoUrls = imgs
+    .map((r) => r.path)
+    .filter((p) => typeof p === "string" && p.startsWith("/uploads/"))
+    .map((p) => `${base}/api${p}`);
+
+  const userDefault = await queryOne<{ listing_footer_default: string | null }>(
+    `SELECT listing_footer_default FROM users WHERE id = $1`,
+    [userId],
+  );
+  const footer = resolveFooter((item as { listing_footer?: string | null }).listing_footer, userDefault?.listing_footer_default);
+
+  const input = buildListingInput(c.moduleSlug, item, { price, photoUrls, currency: meta.currency || "USD", footer });
+  return { ok: true, channel, input, token, meta };
 }
 
 export function makeListingHandler(c: CollectionConfig) {
@@ -35,105 +110,9 @@ export function makeListingHandler(c: CollectionConfig) {
       } catch {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
       }
-      const channel = getChannel(body.channel ?? "");
-      if (!channel) {
-        return NextResponse.json({ error: "channel must be 'reverb' or 'ebay'" }, { status: 400 });
-      }
-
-      const item = await queryOne<RawListItem & { purchase_price?: number | null }>(
-        `SELECT * FROM ${c.table} WHERE id = $1 AND user_id = $2`,
-        [id, session.user.id],
-      );
-      if (!item) {
-        return NextResponse.json({ error: "Item not found" }, { status: 404 });
-      }
-
-      // Credential for this channel.
-      const cred = await queryOne<{
-        token_encrypted: string;
-        refresh_token_encrypted: string | null;
-        token_expires_at: string | null;
-        meta: ChannelMeta;
-      }>(
-        `SELECT token_encrypted, refresh_token_encrypted, token_expires_at, meta
-           FROM marketplace_credentials WHERE user_id = $1 AND channel = $2`,
-        [session.user.id, channel.slug],
-      );
-      if (!cred) {
-        return NextResponse.json(
-          { error: `Connect your ${channel.label} account first (Marketplace settings).`, code: "not_connected" },
-          { status: 400 },
-        );
-      }
-      const meta = (cred.meta ?? {}) as ChannelMeta;
-
-      // Resolve a usable token. eBay goes through resolveEbayAccessToken, which
-      // refreshes the short-lived (~2h) access token from the stored refresh
-      // token and persists it; a failed refresh means the seller must reconnect.
-      // Reverb uses its stored token as-is.
-      let token: string;
-      if (channel.slug === "ebay") {
-        const resolved = await resolveEbayAccessToken(session.user.id);
-        if (resolved.error || !resolved.token) {
-          return NextResponse.json(
-            { error: "Your eBay connection expired. Reconnect eBay in Marketplace settings.", code: "reauth" },
-            { status: 400 },
-          );
-        }
-        token = resolved.token;
-      } else {
-        try {
-          token = decryptToken(cred.token_encrypted);
-        } catch {
-          return NextResponse.json(
-            { error: `Stored ${channel.label} token could not be read. Re-connect the account.`, code: "bad_credential" },
-            { status: 400 },
-          );
-        }
-      }
-
-      // Price: prefer latest AI, then latest user valuation, then purchase price.
-      const latest = await queryOne<{ price: string | number }>(
-        `SELECT price FROM ${c.valuationsTable}
-          WHERE ${c.valuationFkColumn} = $1
-          ORDER BY (valuation_type = 'ai') DESC, created_at DESC
-          LIMIT 1`,
-        [id],
-      );
-      const price =
-        latest?.price != null ? Number(latest.price)
-        : item.purchase_price != null ? Number(item.purchase_price)
-        : null;
-
-      // Photos → absolute, publicly fetchable URLs. DB path is "/uploads/<f>";
-      // the serve route lives at /api/uploads/<f> and 302s to a presigned URL.
-      const imgs = await query<{ path: string }>(
-        `SELECT path FROM ${c.imagesTable} WHERE ${c.imageFkColumn} = $1
-          ORDER BY sort_order ASC, is_primary DESC, created_at ASC`,
-        [id],
-      );
-      const base = appBaseUrl();
-      const photoUrls = imgs
-        .map((r) => r.path)
-        .filter((p) => typeof p === "string" && p.startsWith("/uploads/"))
-        .map((p) => `${base}/api${p}`);
-
-      // Effective listing footer: item override → user default → built-in.
-      const userDefault = await queryOne<{ listing_footer_default: string | null }>(
-        `SELECT listing_footer_default FROM users WHERE id = $1`,
-        [session.user.id],
-      );
-      const footer = resolveFooter(
-        (item as { listing_footer?: string | null }).listing_footer,
-        userDefault?.listing_footer_default,
-      );
-
-      const input = buildListingInput(c.moduleSlug, item, {
-        price,
-        photoUrls,
-        currency: meta.currency || "USD",
-        footer,
-      });
+      const asm = await assembleListing(c, session.user.id, id, body.channel ?? "");
+      if (!asm.ok) return asm.response;
+      const { channel, input, token, meta } = asm;
 
       try {
         const result = await channel.createDraft(input, token, meta);
@@ -261,31 +240,49 @@ export function makePublishHandler(c: CollectionConfig) {
       if (row.state === "published") {
         return NextResponse.json({ state: "published", external_url: row.external_url });
       }
-      if (!row.external_id) {
-        return NextResponse.json({ error: "This draft has no eBay offer id — re-draft first." }, { status: 400 });
-      }
 
-      const { token, error } = await resolveEbayAccessToken(session.user.id);
-      if (error || !token) {
-        return NextResponse.json({ error: "Reconnect eBay in Marketplace settings.", code: "reauth" }, { status: 400 });
+      // Re-sync the draft with the latest item data FIRST (weight, intro, footer,
+      // price, specs), so Publish always reflects what's on the item now — no
+      // need to manually re-draft after an edit. Then publish that fresh offer.
+      const asm = await assembleListing(c, session.user.id, id, "ebay");
+      if (!asm.ok) return asm.response;
+
+      const recordError = async (message: string) => {
+        await query(
+          `UPDATE marketplace_listings SET error = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`,
+          [message, row.id, session.user.id],
+        );
+      };
+
+      let offerId: string | null;
+      try {
+        const refreshed = await asm.channel.createDraft(asm.input, asm.token, asm.meta);
+        offerId = refreshed.externalId ?? row.external_id;
+      } catch (err) {
+        if (err instanceof ListingConfigError) {
+          return NextResponse.json({ error: err.message, code: "config" }, { status: 400 });
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        await recordError(message);
+        return NextResponse.json({ error: `eBay: ${message}` }, { status: 502 });
+      }
+      if (!offerId) {
+        return NextResponse.json({ error: "Could not resolve the eBay offer to publish. Re-draft and try again." }, { status: 400 });
       }
 
       try {
-        const { url } = await publishEbayOffer(row.external_id, token, { sandbox: ebaySandbox() });
+        const { url } = await publishEbayOffer(offerId, asm.token, asm.meta);
         await query(
-          `UPDATE marketplace_listings SET state = 'published', external_url = $1, error = NULL, updated_at = NOW()
-            WHERE id = $2 AND user_id = $3`,
-          [url, row.id, session.user.id],
+          `UPDATE marketplace_listings SET state = 'published', external_id = $1, external_url = $2, error = NULL, updated_at = NOW()
+            WHERE id = $3 AND user_id = $4`,
+          [offerId, url, row.id, session.user.id],
         );
         return NextResponse.json({ state: "published", external_url: url });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         // Record the reason on the row so it shows in the Sell section (publish
         // is where eBay enforces required item specifics — the message names them).
-        await query(
-          `UPDATE marketplace_listings SET error = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`,
-          [message, row.id, session.user.id],
-        );
+        await recordError(message);
         console.error(`[listing] eBay publish failed for ${c.label} id=${id}:`, message);
         return NextResponse.json({ error: `eBay: ${message}` }, { status: 502 });
       }
