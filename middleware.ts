@@ -43,7 +43,8 @@ export async function middleware(req: NextRequest) {
 }
 
 // Same exclusion list as the previous `withAuth` setup:
-// - login/register: public pages.
+// - login/register/privacy: public pages (privacy must be reachable by eBay's
+//   review + the OAuth consent screen without a Vault1 login).
 // - api/auth: NextAuth's own routes (token, refresh, social, [...nextauth]).
 // - api/status: Bearer probe — its handler does the auth check.
 // - api/aasa + .well-known: Apple's CDN must fetch unauthenticated.
@@ -53,5 +54,5 @@ export async function middleware(req: NextRequest) {
 //   route validates via the shared verification-token hash.
 // - _next/static, _next/image, favicon, uploads: static assets.
 export const config = {
-  matcher: ["/((?!login|register|api/auth|api/status|api/aasa|\\.well-known|api/pursuits/run-search|api/mgmt|api/marketplace/ebay/account-deletion|api/upload|api/data/import|_next/static|_next/image|favicon\\.ico|uploads).*)"],
+  matcher: ["/((?!login|register|privacy|api/auth|api/status|api/aasa|\\.well-known|api/pursuits/run-search|api/mgmt|api/marketplace/ebay/account-deletion|api/upload|api/data/import|_next/static|_next/image|favicon\\.ico|uploads).*)"],
 };
