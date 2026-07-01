@@ -59,6 +59,11 @@ export const ebayChannel: ListingChannel = {
   async createDraft(input: ListingInput, token: string, meta: ChannelMeta): Promise<ListingResult> {
     const base = baseUrl(meta);
     const marketplaceId = meta.marketplaceId || "EBAY_US";
+    // eBay SKUs must be alphanumeric only and ≤50 chars — our `vault1-<module>-<uuid>`
+    // SKU has hyphens and is 51 chars, so strip non-alphanumerics and cap. The
+    // hyphen-less UUID keeps it unique + stable (so the inventory item stays
+    // idempotent across re-drafts).
+    const sku = input.sku.replace(/[^a-zA-Z0-9]/g, "").slice(0, 50);
     const currency = meta.currency || input.currency || "USD";
 
     // Leaf category is per-item: use a configured override if present, else
@@ -108,7 +113,7 @@ export const ebayChannel: ListingChannel = {
     }
 
     // Step 1 — inventory item (idempotent on SKU).
-    const invRes = await fetch(`${base}/sell/inventory/v1/inventory_item/${encodeURIComponent(input.sku)}`, {
+    const invRes = await fetch(`${base}/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
       method: "PUT",
       headers: headers(token),
       body: JSON.stringify({
@@ -128,7 +133,7 @@ export const ebayChannel: ListingChannel = {
 
     // Step 2 — offer (unpublished). NOT followed by publishOffer.
     const offerBody = {
-      sku: input.sku,
+      sku,
       marketplaceId,
       format: "FIXED_PRICE",
       availableQuantity: 1,
@@ -158,7 +163,7 @@ export const ebayChannel: ListingChannel = {
       // Unpublished offers have no public URL; point at Seller Hub drafts.
       externalUrl: meta.sandbox ? null : "https://www.ebay.com/sh/lst/drafts",
       state: "draft",
-      payload: { inventory_item_sku: input.sku, offer: offerBody },
+      payload: { inventory_item_sku: sku, offer: offerBody },
     };
   },
 };
