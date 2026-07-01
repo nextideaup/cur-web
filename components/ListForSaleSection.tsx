@@ -35,11 +35,13 @@ export default function ListForSaleSection({
   itemId,
   condition,
   initialIntro,
+  onIntroSaved,
 }: {
   module: string;
   itemId: string;
   condition?: string | null;
   initialIntro?: string | null;
+  onIntroSaved?: (intro: string) => void;
 }) {
   const [channels, setChannels] = useState<ChannelStatus[]>([]);
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
@@ -52,10 +54,12 @@ export default function ListForSaleSection({
   const [introCondition, setIntroCondition] = useState(condition ?? "");
   const [introDetails, setIntroDetails] = useState("");
   const [introBusy, setIntroBusy] = useState<null | "generate" | "save">(null);
+  const [introMsg, setIntroMsg] = useState("");
 
   async function generateIntro() {
     setIntroBusy("generate");
     setError("");
+    setIntroMsg("");
     try {
       const res = await fetch(`/api/${module}/${itemId}/listing-intro`, {
         method: "POST",
@@ -64,8 +68,11 @@ export default function ListForSaleSection({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Could not generate intro");
-      setIntro(data.listing_intro ?? "");
+      const generated = data.listing_intro ?? "";
+      setIntro(generated);
       setIntroFormOpen(false);
+      // The generate endpoint already persisted it — keep the parent item in sync.
+      onIntroSaved?.(generated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate intro");
     } finally {
@@ -76,6 +83,7 @@ export default function ListForSaleSection({
   async function saveIntro() {
     setIntroBusy("save");
     setError("");
+    setIntroMsg("");
     try {
       const res = await fetch(`/api/${module}/${itemId}`, {
         method: "PATCH",
@@ -86,6 +94,9 @@ export default function ListForSaleSection({
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Could not save intro");
       }
+      setIntroMsg("Saved");
+      // Push the saved value up so it persists when the modal is reopened.
+      onIntroSaved?.(intro);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save intro");
     } finally {
@@ -188,10 +199,13 @@ export default function ListForSaleSection({
           </div>
         ) : intro ? (
           <>
-            <textarea value={intro} onChange={(e) => setIntro(e.target.value)} rows={4} className={`${inputCls} resize-none`} />
-            <button onClick={saveIntro} disabled={introBusy === "save"} className={`${btnCls} mt-1`}>
-              {introBusy === "save" ? "Saving…" : "Save intro"}
-            </button>
+            <textarea value={intro} onChange={(e) => { setIntro(e.target.value); if (introMsg) setIntroMsg(""); }} rows={4} className={`${inputCls} resize-none`} />
+            <div className="flex items-center gap-2 mt-1">
+              <button onClick={saveIntro} disabled={introBusy === "save"} className={btnCls}>
+                {introBusy === "save" ? "Saving…" : "Save intro"}
+              </button>
+              {introMsg && <span className="text-xs text-emerald-400">✓ {introMsg}</span>}
+            </div>
           </>
         ) : (
           <p className="text-xs text-text-dim">
