@@ -24,6 +24,9 @@ export interface SpecEntry {
 export interface SpecFields {
   specs?: SpecEntry[] | null;
   specs_updated_at?: string | null;
+  // AI-generated (and user-editable) opening paragraph for marketplace listings
+  // (migration 022). Null until generated.
+  listing_intro?: string | null;
 }
 
 export interface GuitarValuation {

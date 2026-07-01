@@ -18,18 +18,80 @@ interface ChannelStatus {
 }
 
 const CHANNEL_LABEL: Record<string, string> = { reverb: "Reverb", ebay: "eBay" };
+const inputCls =
+  "w-full bg-surface-2 border border-border text-text rounded-xl px-3 py-2 text-sm focus:border-accent focus:ring-1 focus:ring-accent outline-none";
+const btnCls =
+  "px-3 py-1.5 rounded-lg text-xs font-medium bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 disabled:opacity-50";
 
 /**
  * Detail-modal "Sell" section. Shows which marketplaces are connected, lets the
  * user create a DRAFT listing on each, and lists what's already been drafted
  * (with links + error states). Listings are created unpublished — the user
- * reviews and publishes on the marketplace.
+ * reviews and publishes on the marketplace. Also hosts the AI "listing intro"
+ * (a shared opening paragraph used for both Reverb and eBay drafts).
  */
-export default function ListForSaleSection({ module, itemId }: { module: string; itemId: string }) {
+export default function ListForSaleSection({
+  module,
+  itemId,
+  condition,
+  initialIntro,
+}: {
+  module: string;
+  itemId: string;
+  condition?: string | null;
+  initialIntro?: string | null;
+}) {
   const [channels, setChannels] = useState<ChannelStatus[]>([]);
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  // Listing intro (stored on the item, reused by both channels).
+  const [intro, setIntro] = useState(initialIntro ?? "");
+  const [introFormOpen, setIntroFormOpen] = useState(false);
+  const [introCondition, setIntroCondition] = useState(condition ?? "");
+  const [introDetails, setIntroDetails] = useState("");
+  const [introBusy, setIntroBusy] = useState<null | "generate" | "save">(null);
+
+  async function generateIntro() {
+    setIntroBusy("generate");
+    setError("");
+    try {
+      const res = await fetch(`/api/${module}/${itemId}/listing-intro`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ condition: introCondition, details: introDetails }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not generate intro");
+      setIntro(data.listing_intro ?? "");
+      setIntroFormOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not generate intro");
+    } finally {
+      setIntroBusy(null);
+    }
+  }
+
+  async function saveIntro() {
+    setIntroBusy("save");
+    setError("");
+    try {
+      const res = await fetch(`/api/${module}/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listing_intro: intro }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not save intro");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save intro");
+    } finally {
+      setIntroBusy(null);
+    }
+  }
 
   const loadListings = useCallback(async () => {
     try {
@@ -95,6 +157,48 @@ export default function ListForSaleSection({ module, itemId }: { module: string;
       <h3 className="text-sm font-medium text-text-muted mb-3">Sell</h3>
 
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+
+      {/* Listing intro — a shared opening paragraph for both channels. */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-1.5">
+          <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide">Listing intro</h4>
+          {!introFormOpen && (
+            <button onClick={() => setIntroFormOpen(true)} className="text-xs text-accent hover:underline">
+              {intro ? "Regenerate" : "Generate intro"}
+            </button>
+          )}
+        </div>
+
+        {introFormOpen ? (
+          <div className="space-y-2 bg-surface-2 rounded-xl p-3">
+            <div>
+              <label className="block text-xs text-text-muted mb-1">Condition</label>
+              <input value={introCondition} onChange={(e) => setIntroCondition(e.target.value)} placeholder="e.g. Excellent" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs text-text-muted mb-1">Anything special to highlight? (optional)</label>
+              <textarea value={introDetails} onChange={(e) => setIntroDetails(e.target.value)} rows={2} placeholder="e.g. recent pro setup, original case included, reason for selling…" className={`${inputCls} resize-none`} />
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={generateIntro} disabled={introBusy === "generate"} className={btnCls}>
+                {introBusy === "generate" ? "Generating…" : "Generate"}
+              </button>
+              <button onClick={() => setIntroFormOpen(false)} disabled={introBusy === "generate"} className="text-xs text-text-muted hover:text-text">Cancel</button>
+            </div>
+          </div>
+        ) : intro ? (
+          <>
+            <textarea value={intro} onChange={(e) => setIntro(e.target.value)} rows={4} className={`${inputCls} resize-none`} />
+            <button onClick={saveIntro} disabled={introBusy === "save"} className={`${btnCls} mt-1`}>
+              {introBusy === "save" ? "Saving…" : "Save intro"}
+            </button>
+          </>
+        ) : (
+          <p className="text-xs text-text-dim">
+            No intro yet. Generate a natural opening paragraph — it’s stored here and used for both Reverb and eBay drafts.
+          </p>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
         {(["reverb", "ebay"] as const).map((ch) => {

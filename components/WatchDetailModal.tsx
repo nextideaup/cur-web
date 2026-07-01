@@ -387,7 +387,7 @@ export default function WatchDetailModal({
 
           {/* ── Sell Section ── */}
           <div className="mt-6 pt-6 border-t border-border">
-            <ListForSaleSection module="watches" itemId={item.id} />
+            <ListForSaleSection module="watches" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} />
           </div>
 
           {/* ── Valuation Section ── */}
