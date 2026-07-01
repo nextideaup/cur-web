@@ -39,6 +39,11 @@ export interface ListingInput {
   photoUrls: string[];     // absolute, publicly fetchable URLs
   specs: SpecEntry[];
   sku: string;             // stable per-item identifier for the marketplace
+  // Shipping package (eBay requires a weight to publish). Null when unset.
+  packageWeightLb?: number | null;
+  packageLengthIn?: number | null;
+  packageWidthIn?: number | null;
+  packageHeightIn?: number | null;
 }
 
 export interface ListingResult {

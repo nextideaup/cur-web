@@ -36,16 +36,20 @@ export default function ListForSaleSection({
   condition,
   initialIntro,
   initialFooter,
+  initialPackage,
   onIntroSaved,
   onFooterSaved,
+  onPackageSaved,
 }: {
   module: string;
   itemId: string;
   condition?: string | null;
   initialIntro?: string | null;
   initialFooter?: string | null;
+  initialPackage?: { weight?: number | string | null; length?: number | string | null; width?: number | string | null; height?: number | string | null };
   onIntroSaved?: (intro: string) => void;
   onFooterSaved?: (footer: string) => void;
+  onPackageSaved?: (pkg: { weight: string; length: string; width: string; height: string }) => void;
 }) {
   const [channels, setChannels] = useState<ChannelStatus[]>([]);
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
@@ -59,6 +63,88 @@ export default function ListForSaleSection({
   const [introDetails, setIntroDetails] = useState("");
   const [introBusy, setIntroBusy] = useState<null | "generate" | "save">(null);
   const [introMsg, setIntroMsg] = useState("");
+
+  // Shipping package (per item) + reusable named box presets.
+  const toStr = (v: number | string | null | undefined) => (v == null || v === "" ? "" : String(v));
+  const [pkg, setPkg] = useState({
+    weight: toStr(initialPackage?.weight),
+    length: toStr(initialPackage?.length),
+    width: toStr(initialPackage?.width),
+    height: toStr(initialPackage?.height),
+  });
+  const [presets, setPresets] = useState<{ id: string; name: string; weight_lb: string | null; length_in: string | null; width_in: string | null; height_in: string | null }[]>([]);
+  const [pkgBusy, setPkgBusy] = useState(false);
+  const [pkgMsg, setPkgMsg] = useState("");
+
+  const loadPresets = useCallback(async () => {
+    try {
+      const res = await fetch("/api/marketplace/box-presets");
+      if (res.ok) setPresets(await res.json());
+    } catch { /* non-critical */ }
+  }, []);
+
+  const numOrNull = (s: string) => {
+    const n = parseFloat(s);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  async function savePackage() {
+    setPkgBusy(true);
+    setError("");
+    setPkgMsg("");
+    try {
+      const res = await fetch(`/api/${module}/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          package_weight_lb: numOrNull(pkg.weight),
+          package_length_in: numOrNull(pkg.length),
+          package_width_in: numOrNull(pkg.width),
+          package_height_in: numOrNull(pkg.height),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not save package");
+      }
+      setPkgMsg("Saved");
+      onPackageSaved?.(pkg);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save package");
+    } finally {
+      setPkgBusy(false);
+    }
+  }
+
+  function applyPreset(id: string) {
+    const p = presets.find((x) => x.id === id);
+    if (!p) return;
+    setPkg({ weight: toStr(p.weight_lb), length: toStr(p.length_in), width: toStr(p.width_in), height: toStr(p.height_in) });
+    setPkgMsg("");
+  }
+
+  async function saveAsPreset() {
+    const name = prompt("Name this box (e.g. Guitar box, Small flat):");
+    if (!name?.trim()) return;
+    try {
+      const res = await fetch("/api/marketplace/box-presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          weight_lb: numOrNull(pkg.weight),
+          length_in: numOrNull(pkg.length),
+          width_in: numOrNull(pkg.width),
+          height_in: numOrNull(pkg.height),
+        }),
+      });
+      if (!res.ok) throw new Error("Could not save preset");
+      setPkgMsg(`Saved "${name.trim()}" preset`);
+      await loadPresets();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save preset");
+    }
+  }
 
   // Per-listing footer override (blank = use the account default, shown as the
   // placeholder once fetched).
@@ -164,8 +250,9 @@ export default function ListForSaleSection({
         }
       } catch { /* non-critical */ }
     })();
+    loadPresets();
     loadListings();
-  }, [loadListings]);
+  }, [loadListings, loadPresets]);
 
   async function publishListing(listingId: string) {
     if (!confirm("Publish this listing LIVE on eBay?\n\nThis creates an active, publicly visible listing (fees apply). eBay will also enforce all required item details at this step.")) return;
@@ -296,6 +383,33 @@ export default function ListForSaleSection({
             {footerBusy ? "Saving…" : "Save footer"}
           </button>
           <span className="text-[11px] text-text-dim">Leave blank to use your default (Marketplace settings).</span>
+        </div>
+      </div>
+
+      {/* Shipping package — weight + dims, with reusable named box presets.
+          Required by eBay to publish. */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-1.5">
+          <h4 className="text-xs font-medium text-text-muted uppercase tracking-wide">Shipping package</h4>
+          {pkgMsg && <span className="text-xs text-emerald-400">✓ {pkgMsg}</span>}
+        </div>
+        {presets.length > 0 && (
+          <select onChange={(e) => { if (e.target.value) applyPreset(e.target.value); }} value="" className={`${inputCls} mb-2`}>
+            <option value="">Apply a saved box…</option>
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+        <div className="grid grid-cols-4 gap-2">
+          <input value={pkg.weight} onChange={(e) => { setPkg({ ...pkg, weight: e.target.value }); if (pkgMsg) setPkgMsg(""); }} placeholder="Weight (lb)" inputMode="decimal" className={inputCls} />
+          <input value={pkg.length} onChange={(e) => setPkg({ ...pkg, length: e.target.value })} placeholder="L (in)" inputMode="decimal" className={inputCls} />
+          <input value={pkg.width} onChange={(e) => setPkg({ ...pkg, width: e.target.value })} placeholder="W (in)" inputMode="decimal" className={inputCls} />
+          <input value={pkg.height} onChange={(e) => setPkg({ ...pkg, height: e.target.value })} placeholder="H (in)" inputMode="decimal" className={inputCls} />
+        </div>
+        <div className="flex items-center gap-3 mt-1">
+          <button onClick={savePackage} disabled={pkgBusy} className={btnCls}>{pkgBusy ? "Saving…" : "Save package"}</button>
+          <button onClick={saveAsPreset} className="text-xs text-text-muted hover:text-text">Save as box preset</button>
         </div>
       </div>
 

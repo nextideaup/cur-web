@@ -400,7 +400,7 @@ export default function AutomobileDetailModal({
 
           {/* ── Sell Section ── */}
           <div className="px-6 pb-6 border-t border-border pt-5">
-            <ListForSaleSection module="automobiles" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} initialFooter={item.listing_footer} onIntroSaved={(v) => onItemUpdated?.({ ...item, listing_intro: v })} onFooterSaved={(v) => onItemUpdated?.({ ...item, listing_footer: v })} />
+            <ListForSaleSection module="automobiles" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} initialFooter={item.listing_footer} onIntroSaved={(v) => onItemUpdated?.({ ...item, listing_intro: v })} onFooterSaved={(v) => onItemUpdated?.({ ...item, listing_footer: v })} initialPackage={{ weight: item.package_weight_lb, length: item.package_length_in, width: item.package_width_in, height: item.package_height_in }} onPackageSaved={(p) => onItemUpdated?.({ ...item, package_weight_lb: p.weight, package_length_in: p.length, package_width_in: p.width, package_height_in: p.height })} />
           </div>
 
           {/* Valuation section */}
