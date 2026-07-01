@@ -8,6 +8,8 @@ import { getApiSession } from "@/lib/api-auth";
 import { query, queryOne } from "@/lib/db";
 import type { CollectionConfig } from "@/lib/collections/types";
 import { getChannel } from "@/lib/listings";
+import { publishEbayOffer } from "@/lib/listings/ebay";
+import { ebaySandbox } from "@/lib/listings/ebay-oauth";
 import { buildListingInput, type RawListItem } from "@/lib/listings/mappers";
 import { resolveFooter } from "@/lib/listings/footer";
 import { decryptToken } from "@/lib/listings/crypto";
@@ -227,4 +229,63 @@ export function makeListingHandler(c: CollectionConfig) {
   }
 
   return { POST, GET, DELETE };
+}
+
+// Publish an eBay draft (unpublished offer) → a LIVE listing. Explicit,
+// user-initiated. Body: { listingId } (a marketplace_listings row id for an
+// eBay draft). Updates the row to state='published' with the live listing URL.
+export function makePublishHandler(c: CollectionConfig) {
+  return async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    try {
+      const session = await getApiSession(request);
+      if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const { id } = await params;
+      let body: { listingId?: string };
+      try {
+        body = (await request.json()) as typeof body;
+      } catch {
+        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+      }
+      if (!body.listingId) {
+        return NextResponse.json({ error: "listingId is required" }, { status: 400 });
+      }
+
+      const row = await queryOne<{ id: string; external_id: string | null; state: string; external_url: string | null }>(
+        `SELECT id, external_id, state, external_url FROM marketplace_listings
+          WHERE id = $1 AND user_id = $2 AND module = $3 AND item_id = $4 AND channel = 'ebay'`,
+        [body.listingId, session.user.id, c.moduleSlug, id],
+      );
+      if (!row) return NextResponse.json({ error: "eBay draft not found" }, { status: 404 });
+      if (row.state === "published") {
+        return NextResponse.json({ state: "published", external_url: row.external_url });
+      }
+      if (!row.external_id) {
+        return NextResponse.json({ error: "This draft has no eBay offer id — re-draft first." }, { status: 400 });
+      }
+
+      const { token, error } = await resolveEbayAccessToken(session.user.id);
+      if (error || !token) {
+        return NextResponse.json({ error: "Reconnect eBay in Marketplace settings.", code: "reauth" }, { status: 400 });
+      }
+
+      try {
+        const { url } = await publishEbayOffer(row.external_id, token, { sandbox: ebaySandbox() });
+        await query(
+          `UPDATE marketplace_listings SET state = 'published', external_url = $1, error = NULL, updated_at = NOW()
+            WHERE id = $2 AND user_id = $3`,
+          [url, row.id, session.user.id],
+        );
+        return NextResponse.json({ state: "published", external_url: url });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[listing] eBay publish failed for ${c.label} id=${id}:`, message);
+        return NextResponse.json({ error: `eBay: ${message}` }, { status: 502 });
+      }
+    } catch (error) {
+      console.error(`POST /api/${c.label}/[id]/list/publish error:`, error);
+      return NextResponse.json({ error: "Failed to publish listing" }, { status: 500 });
+    }
+  };
 }
