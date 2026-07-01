@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 // Where a seller sets these up on eBay when they have none.
 const SETUP_LINKS = {
-  policies: "https://www.bizpolicy.ebay.com/businesspolicy/manage",
+  policies: "https://www.ebay.com/bp/policyoptin",
   locations: "https://www.ebay.com/sh/ovw",
 };
 
