@@ -20,6 +20,7 @@ export interface RawListItem {
   description?: string | null;
   notes?: string | null;
   specs?: SpecEntry[] | null;
+  listing_intro?: string | null;
 }
 
 function buildTitle(item: RawListItem): string {
@@ -32,10 +33,17 @@ function buildTitle(item: RawListItem): string {
 
 function buildDescription(item: RawListItem): string {
   const parts: string[] = [];
-  const lead = item.short_description?.trim() || item.description?.trim();
-  if (lead) parts.push(lead);
-  if (item.long_description?.trim()) parts.push(item.long_description.trim());
-  if (item.notes?.trim()) parts.push(item.notes.trim());
+  const intro = item.listing_intro?.trim();
+  if (intro) {
+    // A generated/edited listing intro is the polished opening — it supersedes
+    // the raw short/long description and notes prose (which it was written from).
+    parts.push(intro);
+  } else {
+    const lead = item.short_description?.trim() || item.description?.trim();
+    if (lead) parts.push(lead);
+    if (item.long_description?.trim()) parts.push(item.long_description.trim());
+    if (item.notes?.trim()) parts.push(item.notes.trim());
+  }
 
   const specs = (item.specs ?? []).filter((s) => s?.label?.trim() && s?.value?.trim());
   if (specs.length > 0) {

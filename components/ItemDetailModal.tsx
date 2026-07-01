@@ -380,7 +380,7 @@ export default function ItemDetailModal({
 
           {/* ── Sell Section ── */}
           <div className="mt-6 pt-6 border-t border-border">
-            <ListForSaleSection module="guitars" itemId={item.id} />
+            <ListForSaleSection module="guitars" itemId={item.id} condition={item.condition} initialIntro={item.listing_intro} />
           </div>
 
           {/* ── Valuation Section ── */}

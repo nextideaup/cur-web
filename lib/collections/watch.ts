@@ -30,6 +30,7 @@ export const watchConfig: CollectionConfig = {
     { name: "notes", trim: true },
     { name: "insure", type: "boolean" },
     { name: "specs", type: "jsonb" },
+    { name: "listing_intro", trim: true },
   ],
   conditionRequired: true,
   patchSetUpdatedAt: false,
