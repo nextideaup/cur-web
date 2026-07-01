@@ -68,6 +68,19 @@ async function conditionUuid(condition: Condition, token: string, meta: ChannelM
   return uuid;
 }
 
+// Reverb renders the description as HTML, so plain newlines collapse into one
+// run-on paragraph. Convert the assembled description (notes, a blank line, then
+// one spec per line) to HTML: escape entities, then map newlines to <br>. A
+// blank line (\n\n) becomes <br><br>; each spec's \n becomes a single <br> —
+// exactly the notes → spaced → spec-per-line layout we want.
+function descriptionHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>\n");
+}
+
 export const reverbChannel: ListingChannel = {
   slug: "reverb",
   label: "Reverb",
@@ -85,7 +98,7 @@ export const reverbChannel: ListingChannel = {
       make: input.brand ?? undefined,
       model: input.model ?? undefined,
       title: input.title,
-      description: input.description,
+      description: descriptionHtml(input.description),
       condition: { uuid: condUuid },
       photos: input.photoUrls.slice(0, 25), // Reverb max 25 photos per listing
       sku: input.sku,
