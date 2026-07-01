@@ -132,9 +132,9 @@ export const ebayChannel: ListingChannel = {
     }
 
     // Step 2 — offer (unpublished). NOT followed by publishOffer.
+    // The offer body shared by create + update. sku/marketplaceId are immutable
+    // and set only on create (updateOffer rejects them).
     const offerBody = {
-      sku,
-      marketplaceId,
       format: "FIXED_PRICE",
       availableQuantity: 1,
       categoryId,
@@ -147,16 +147,43 @@ export const ebayChannel: ListingChannel = {
       pricingSummary: { price: { value: input.price.toFixed(2), currency } },
       merchantLocationKey: meta.merchantLocationKey,
     };
-    const offerRes = await fetch(`${base}/sell/inventory/v1/offer`, {
-      method: "POST",
-      headers: headers(token),
-      body: JSON.stringify(offerBody),
-    });
-    if (!offerRes.ok) {
-      throw new Error(`eBay offer create failed (HTTP ${offerRes.status}): ${await errorText(offerRes)}`);
+
+    // An offer for this SKU may already exist from a prior draft — createOffer
+    // 400s with "Offer entity already exists" in that case. Look it up and
+    // UPDATE it instead, so re-drafting is idempotent.
+    let offerId: string | null = null;
+    const findRes = await fetch(
+      `${base}/sell/inventory/v1/offer?sku=${encodeURIComponent(sku)}&marketplace_id=${marketplaceId}`,
+      { headers: headers(token) },
+    );
+    if (findRes.ok) {
+      const data = (await findRes.json()) as { offers?: { offerId?: string; marketplaceId?: string }[] };
+      offerId =
+        data.offers?.find((o) => o.marketplaceId === marketplaceId)?.offerId ??
+        data.offers?.[0]?.offerId ??
+        null;
     }
-    const offer = (await offerRes.json()) as { offerId?: string };
-    const offerId = offer.offerId ?? null;
+
+    if (offerId) {
+      const upRes = await fetch(`${base}/sell/inventory/v1/offer/${offerId}`, {
+        method: "PUT",
+        headers: headers(token),
+        body: JSON.stringify(offerBody),
+      });
+      if (!upRes.ok) {
+        throw new Error(`eBay offer update failed (HTTP ${upRes.status}): ${await errorText(upRes)}`);
+      }
+    } else {
+      const offerRes = await fetch(`${base}/sell/inventory/v1/offer`, {
+        method: "POST",
+        headers: headers(token),
+        body: JSON.stringify({ ...offerBody, sku, marketplaceId }),
+      });
+      if (!offerRes.ok) {
+        throw new Error(`eBay offer create failed (HTTP ${offerRes.status}): ${await errorText(offerRes)}`);
+      }
+      offerId = ((await offerRes.json()) as { offerId?: string }).offerId ?? null;
+    }
 
     return {
       externalId: offerId,
