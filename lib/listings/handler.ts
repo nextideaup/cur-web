@@ -183,5 +183,36 @@ export function makeListingHandler(c: CollectionConfig) {
     }
   }
 
-  return { POST, GET };
+  // Remove a Vault 1 listing record. This deletes only our tracking row — it
+  // does NOT end/delete the listing on the marketplace (the seller manages the
+  // live listing there). Used to clear a stale row after deleting on Reverb/eBay
+  // or to dismiss a recorded error.
+  async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    try {
+      const session = await getApiSession(request);
+      if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const { id } = await params;
+      const listingId = new URL(request.url).searchParams.get("listingId");
+      if (!listingId) {
+        return NextResponse.json({ error: "listingId is required" }, { status: 400 });
+      }
+      const deleted = await query<{ id: string }>(
+        `DELETE FROM marketplace_listings
+           WHERE id = $1 AND user_id = $2 AND module = $3 AND item_id = $4
+           RETURNING id`,
+        [listingId, session.user.id, c.moduleSlug, id],
+      );
+      if (deleted.length === 0) {
+        return NextResponse.json({ error: "Listing record not found" }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      console.error(`DELETE /api/${c.label}/[id]/list error:`, error);
+      return NextResponse.json({ error: "Failed to remove listing record" }, { status: 500 });
+    }
+  }
+
+  return { POST, GET, DELETE };
 }
