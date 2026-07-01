@@ -7,6 +7,7 @@ import { getApiSession } from "@/lib/api-auth";
 import { query } from "@/lib/db";
 import { encryptToken, encryptionAvailable } from "@/lib/listings/crypto";
 import { CHANNEL_SLUGS } from "@/lib/listings";
+import { ebayOAuthConfigured } from "@/lib/listings/ebay-oauth";
 import type { ChannelMeta, ListingChannelSlug } from "@/lib/listings/types";
 
 // Whitelist the non-secret config we persist into meta, so a caller can't stash
@@ -25,8 +26,8 @@ export async function GET(request: NextRequest) {
   const session = await getApiSession(request);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rows = await query<{ channel: ListingChannelSlug; label: string | null; meta: ChannelMeta; updated_at: string }>(
-    `SELECT channel, label, meta, updated_at FROM marketplace_credentials WHERE user_id = $1`,
+  const rows = await query<{ channel: ListingChannelSlug; label: string | null; meta: ChannelMeta; updated_at: string; refresh_token_encrypted: string | null }>(
+    `SELECT channel, label, meta, updated_at, refresh_token_encrypted FROM marketplace_credentials WHERE user_id = $1`,
     [session.user.id],
   );
   const byChannel = new Map(rows.map((r) => [r.channel, r]));
@@ -35,12 +36,51 @@ export async function GET(request: NextRequest) {
     return {
       channel: slug,
       connected: !!r,
+      // Distinguishes an OAuth ("Connect eBay") connection from a pasted token,
+      // so the UI can show the right control.
+      oauth: !!r?.refresh_token_encrypted,
       label: r?.label ?? null,
       meta: r?.meta ?? {},
       updated_at: r?.updated_at ?? null,
     };
   });
-  return NextResponse.json({ encryption_available: encryptionAvailable(), channels });
+  return NextResponse.json({
+    encryption_available: encryptionAvailable(),
+    ebay_oauth_available: ebayOAuthConfigured(),
+    channels,
+  });
+}
+
+// Meta-only update — set account config (eBay category / policies / location)
+// on an existing credential WITHOUT re-supplying a token. Used after an OAuth
+// connect, where the token came from the callback, not a paste.
+export async function PATCH(request: NextRequest) {
+  const session = await getApiSession(request);
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  let body: { channel?: string; meta?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  if (body.channel !== "reverb" && body.channel !== "ebay") {
+    return NextResponse.json({ error: "channel must be 'reverb' or 'ebay'" }, { status: 400 });
+  }
+
+  const meta = sanitizeMeta(body.meta);
+  // Merge (not replace) so server-set keys like `sandbox` (from the OAuth
+  // callback) survive a config save that only carries category/policy/location.
+  const result = await query<{ id: string }>(
+    `UPDATE marketplace_credentials
+        SET meta = COALESCE(meta, '{}'::jsonb) || $1::jsonb, updated_at = NOW()
+      WHERE user_id = $2 AND channel = $3 RETURNING id`,
+    [JSON.stringify(meta), session.user.id, body.channel],
+  );
+  if (result.length === 0) {
+    return NextResponse.json({ error: `Connect ${body.channel} first, then save settings.`, code: "not_connected" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, channel: body.channel, meta });
 }
 
 export async function POST(request: NextRequest) {

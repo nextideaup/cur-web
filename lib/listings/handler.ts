@@ -9,7 +9,8 @@ import { query, queryOne } from "@/lib/db";
 import type { CollectionConfig } from "@/lib/collections/types";
 import { getChannel } from "@/lib/listings";
 import { buildListingInput, type RawListItem } from "@/lib/listings/mappers";
-import { decryptToken } from "@/lib/listings/crypto";
+import { decryptToken, encryptToken } from "@/lib/listings/crypto";
+import { refreshAccessToken } from "@/lib/listings/ebay-oauth";
 import { ListingConfigError, type ChannelMeta } from "@/lib/listings/types";
 
 function appBaseUrl(): string {
@@ -45,8 +46,14 @@ export function makeListingHandler(c: CollectionConfig) {
       }
 
       // Credential for this channel.
-      const cred = await queryOne<{ token_encrypted: string; meta: ChannelMeta }>(
-        `SELECT token_encrypted, meta FROM marketplace_credentials WHERE user_id = $1 AND channel = $2`,
+      const cred = await queryOne<{
+        token_encrypted: string;
+        refresh_token_encrypted: string | null;
+        token_expires_at: string | null;
+        meta: ChannelMeta;
+      }>(
+        `SELECT token_encrypted, refresh_token_encrypted, token_expires_at, meta
+           FROM marketplace_credentials WHERE user_id = $1 AND channel = $2`,
         [session.user.id, channel.slug],
       );
       if (!cred) {
@@ -65,6 +72,32 @@ export function makeListingHandler(c: CollectionConfig) {
         );
       }
       const meta = (cred.meta ?? {}) as ChannelMeta;
+
+      // eBay OAuth: the access token is short-lived (~2h). When it's expired (or
+      // within 60s of it), mint a fresh one from the stored refresh token and
+      // persist it. Paste-token credentials have no refresh token and are used
+      // as-is. A failed refresh means the seller must re-connect.
+      if (channel.slug === "ebay" && cred.refresh_token_encrypted) {
+        const expiresAt = cred.token_expires_at ? new Date(cred.token_expires_at).getTime() : 0;
+        if (Date.now() > expiresAt - 60_000) {
+          try {
+            const refreshed = await refreshAccessToken(decryptToken(cred.refresh_token_encrypted));
+            token = refreshed.access_token;
+            await query(
+              `UPDATE marketplace_credentials
+                  SET token_encrypted = $1, token_expires_at = $2, updated_at = NOW()
+                WHERE user_id = $3 AND channel = 'ebay'`,
+              [encryptToken(token), new Date(Date.now() + refreshed.expires_in * 1000), session.user.id],
+            );
+          } catch (e) {
+            console.error(`[listing] eBay token refresh failed for user=${session.user.id}:`, e);
+            return NextResponse.json(
+              { error: "Your eBay connection expired. Reconnect eBay in Marketplace settings.", code: "reauth" },
+              { status: 400 },
+            );
+          }
+        }
+      }
 
       // Price: prefer latest AI, then latest user valuation, then purchase price.
       const latest = await queryOne<{ price: string | number }>(
