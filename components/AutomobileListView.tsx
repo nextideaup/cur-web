@@ -4,6 +4,7 @@ import { AutoItem, CONDITION_COLORS } from "@/lib/types";
 import { useHideValues } from "@/lib/HideValuesContext";
 import SelectionCheckbox from "@/components/SelectionCheckbox";
 import SortableHeader from "@/components/forms/SortableHeader";
+import RowThumb from "@/components/RowThumb";
 
 const fmtRaw = (price: number | null | undefined) => {
   if (price == null) return "—";
@@ -76,6 +77,7 @@ export default function AutomobileListView({
                 <SelectionCheckbox state={headerState} onChange={onSelectAllToggle!} header />
               </th>
             )}
+            <th className="px-4 py-3 w-14 text-left" />
             {COLUMNS.map((col) => (
               <SortableHeader
                 key={col.label}
@@ -108,6 +110,7 @@ export default function AutomobileListView({
                     />
                   </td>
                 )}
+                <td className="px-4 py-3"><RowThumb images={item.images} /></td>
                 <td className="px-4 py-3 text-text-muted whitespace-nowrap">{item.year ?? "—"}</td>
                 <td className="px-4 py-3 text-text font-medium whitespace-nowrap">{item.brand}</td>
                 <td className="px-4 py-3 text-text whitespace-nowrap">{item.model}</td>

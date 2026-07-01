@@ -4,6 +4,7 @@ import { IoDItem, CONDITION_COLORS, IOD_CATEGORY_LABELS } from "@/lib/types";
 import { useHideValues } from "@/lib/HideValuesContext";
 import SelectionCheckbox from "@/components/SelectionCheckbox";
 import SortableHeader from "@/components/forms/SortableHeader";
+import RowThumb from "@/components/RowThumb";
 
 const fmtRaw = (price: number | null | undefined) => {
   if (price == null) return "—";
@@ -69,6 +70,7 @@ export default function IoDListView({
                 <SelectionCheckbox state={headerState} onChange={onSelectAllToggle!} header />
               </th>
             )}
+            <th className="px-4 py-3 w-14 text-left" />
             {COLUMNS.map((col) => (
               <SortableHeader
                 key={col.label}
@@ -101,6 +103,7 @@ export default function IoDListView({
                     />
                   </td>
                 )}
+                <td className="px-4 py-3"><RowThumb images={item.images} /></td>
                 <td className="px-4 py-3 text-text font-medium max-w-[200px] truncate">{item.short_description}</td>
                 <td className="px-4 py-3 text-text-muted whitespace-nowrap">{IOD_CATEGORY_LABELS[item.category]}</td>
                 <td className="px-4 py-3 text-text-muted whitespace-nowrap">{item.brand || "—"}</td>
