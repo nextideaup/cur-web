@@ -209,8 +209,9 @@ export const ebayChannel: ListingChannel = {
 
     return {
       externalId: offerId,
-      // Unpublished offers have no public URL; point at Seller Hub drafts.
-      externalUrl: meta.sandbox ? null : "https://www.ebay.com/sh/lst/drafts",
+      // An unpublished offer has no viewable listing (it isn't in Seller Hub);
+      // a real URL only exists after Publish. Leave it null so no "View" shows.
+      externalUrl: null,
       state: "draft",
       payload: { inventory_item_sku: sku, offer: offerBody },
     };

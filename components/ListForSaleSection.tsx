@@ -178,7 +178,7 @@ export default function ListForSaleSection({
         body: JSON.stringify({ listingId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Publish failed");
+      if (!res.ok) throw new Error(data.error || `Publish failed (HTTP ${res.status})`);
       await loadListings();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Publish failed");
@@ -345,7 +345,7 @@ export default function ListForSaleSection({
               >
                 {l.state}
               </span>
-              {l.external_url ? (
+              {l.external_url && (l.channel !== "ebay" || l.state === "published") ? (
                 <a href={l.external_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline truncate">
                   View on {CHANNEL_LABEL[l.channel]} →
                 </a>
