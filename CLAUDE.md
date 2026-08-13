@@ -7,14 +7,25 @@ production at [vault1.co](https://vault1.co); local dev runs against a
 docker-compose Postgres.
 
 **Note on the rename:** The app was rebranded "Curatada → Vault 1" with the
-new production domain `vault1.co`. The codename `Quallection` survives in
-the local docker-compose service names, the `package.json` `name` field,
-and various internal identifiers (`/spaces/Curatada/...` Confluence URLs,
-`cur-web` repo name, `CUR` Jira project key) — those are deferred follow-ups
-since they each carry meaningful ripple effects. `lib/mgmt/envelope.ts`
-`APP_SLUG = "curatada"` also stays for now; it's the cross-app management
-API contract identifier and changing it requires a coordinated update on
-the consuming dashboard side.
+new production domain `vault1.co`. As of 2026-08-13 the identifier renames
+have largely landed: the repo is `nextideaup/vlt-web`, the docs space is
+DocSite `VLT`, and the internal app key is `VLT` (was `CUR`) — so historical
+`CUR-n` work-item keys re-render as `VLT-n`.
+
+The codename `Quallection` still survives in the local docker-compose service
+names and the `package.json` `name` field; both stay, since changing them
+ripples through Docker image names and Railway build cache.
+
+Two identifiers deliberately still say "curatada" and **must not be renamed
+casually**:
+
+- `lib/mgmt/envelope.ts` `APP_SLUG = "curatada"` — the cross-app management
+  API contract identifier. Changing it requires a coordinated update on the
+  consuming dashboard side.
+- The Railway private hostname `curatada.railway.internal`, which the same
+  mgmt consumer resolves the app over. It is unaffected by the GitHub repo
+  rename, but **renaming the Railway service would change it** and break that
+  consumer.
 
 ## Run
 
