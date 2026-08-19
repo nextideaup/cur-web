@@ -1,5 +1,84 @@
 # Vault 1 (formerly Curatada / Quallection)
 
+## Every change starts as a work item. No exceptions.
+
+**Open the work item before you write code.** Not after. Not while opening the
+pull request. First.
+
+A work item records a decision — what was asked for, by whom, and why. A pull
+request is the *delivery half* of that decision. A PR with no work item is a
+change nobody can explain later: the diff says what happened and nothing says
+why.
+
+This is enforced, not encouraged. A check run named `work-item` is posted on
+every pull request to this repository and is a **required status check**. It
+fails when the PR names no work item that resolves against the database, and the
+merge button is unavailable while it does.
+
+### The five doors
+
+Every work item enters through exactly one:
+
+```
+Support Ticket  →  Work Item          origin: ticket
+One-Pager       →  Work Item          origin: one-pager
+One-Pager → PRD →  Work Item          origin: one-pager
+One-Pager → PRD → Epic → Work Item    origin: epic
+Claude Session  →  Work Item          origin: session
+```
+
+**If a founder asks you to do something in a session, that is the fifth door.**
+You open the work item. It is not an interruption to the task; it is the first
+step of it.
+
+### The order
+
+```
+1. create the work item          ← before any code
+2. branch from its key           ← claude/<app>-<n>-short-slug
+3. write the code
+4. PR title leads with the key   ← [<APP>-<n>] what it does
+```
+
+### Creating one
+
+Use the **NextIdeaUp MCP** connector (`https://nextideaup.com/api/mcp`), tool
+`create_work_item`. If the tools are deferred in your session, load them with
+ToolSearch (e.g. `+create_work_item`). Writes are AI-attributed automatically.
+
+**Never invent a key.** The server assigns it; use what it returns. On
+2026-08-19 a pull request reached the merge button naming a work item that
+existed in one system and not the one the gate reads — two systems were live and
+both issued keys from independent counters. A guessed key is worse than no key:
+it looks compliant, so a human scanning the list moves on, and the gate has to
+be the thing that catches it.
+
+**Never attach the work to an unrelated existing item** to clear the check. The
+link is a claim that this PR delivers that item. A missing link is visibly
+missing; a wrong one looks correct forever.
+
+### If you genuinely believe no work item applies
+
+Say so to the founder and stop. Do not merge around it. Every case raised so far
+turned out to have a work item that should have been opened at the start.
+
+---
+
+## The two gates on every pull request
+
+| check | fails when |
+| --- | --- |
+| `ci` | the required suites are red, pending, stale, or **held** |
+| `work-item` | the PR names no work item that resolves |
+
+A **held** check is not a failure — it means the author is not vouched for, or
+no one is working the linked item. It reads as pending, so it blocks. The Checks
+screen offers *run it anyway* on the row.
+
+Both are required. A founder can bypass in an emergency (`enforce_admins` is
+false), and every bypass lands on the console's **Merged without a passing
+check** screen. Bypassing is visible, not secret.
+
 Personal "vault" for tracking high-end collections — guitars, watches, automobiles,
 items of distinction ("iod" / collectibles). Next.js 15 App Router (React 19) +
 Postgres + NextAuth (JWT, multi-provider) + Tailwind. Deployed on Railway in
